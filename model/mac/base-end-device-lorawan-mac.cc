@@ -600,6 +600,15 @@ BaseEndDeviceLorawanMac::OnLinkCheckAns(uint8_t margin, uint8_t gwCnt)
     m_lastKnownGatewayCount = gwCnt;
 }
 
+// Handle LinkADRReq special values according to LoRaWAN ADR semantics.
+// DataRate = 0xF and TXPower = 0xF mean "keep current value", so these
+// fields must not be validated or applied as new settings.
+//
+// References:
+// - Semtech Learn: https://learn.semtech.com/mod/book/view.php?id=174&chapterid=159
+// - See also signetlabdei/lorawan, model/end-device-lorawan-mac.cc:
+// - https://github.com/signetlabdei/lorawan/blob/develop/model/end-device-lorawan-mac.cc
+
 void
 BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
                                       uint8_t txPower,
@@ -624,59 +633,47 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
             break;
         }
     }
-
-    // Check the dataRate
-    /////////////////////
-    // We need to know we can use it at all
-    // To assess this, we try and convert it to a SF/BW combination and check if
-    // those values are valid. Since GetSfFromDataRate and
-    // GetBandwidthFromDataRate return 0 if the dataRate is not recognized, we
-    // can check against this.
-    uint8_t sf = GetSfFromDataRate(dataRate);
-    double bw = GetBandwidthFromDataRate(dataRate);
-    NS_LOG_DEBUG("SF: " << unsigned(sf) << ", BW: " << bw);
-    if (sf == 0 || bw == 0)
-    {
-        dataRateOk = false;
-        NS_LOG_DEBUG("Data rate non valid");
-    }
-
-    // We need to know we can use it in at least one of the enabled channels
-    // Cycle through available channels, stop when at least one is enabled for the
-    // specified dataRate.
-    if (dataRateOk && channelMaskOk) // If false, skip the check
-    {
-        bool foundAvailableChannel = false;
-        for (auto& chIndex : enabledChannels)
-        {
-            auto ch = m_channelManager->GetChannel(chIndex);
-            NS_LOG_DEBUG("MinDR: " << unsigned(ch->GetMinimumDataRate()));
-            NS_LOG_DEBUG("MaxDR: " << unsigned(ch->GetMaximumDataRate()));
-            if (ch->GetMinimumDataRate() <= dataRate && ch->GetMaximumDataRate() >= dataRate)
+    
+    // In LinkADRReq, DataRate = 0xF means "keep current data rate".
+    // It must not be validated as a new DR value or applied to m_dataRate.
+    if (dataRate != 0xF){
+        if(channelMaskOk){
+            bool foundAvailableChannel = false;
+            for (auto& chIndex : enabledChannels)
             {
-                foundAvailableChannel = true;
-                break;
+                auto ch = m_channelManager->GetChannel(chIndex);
+                NS_LOG_DEBUG("MinDR: " << unsigned(ch->GetMinimumDataRate()));
+                NS_LOG_DEBUG("MaxDR: " << unsigned(ch->GetMaximumDataRate()));
+                if (ch->GetMinimumDataRate() <= dataRate && ch->GetMaximumDataRate() >= dataRate)
+                {
+                    foundAvailableChannel = true;
+                    break;
+                }
+            }
+
+            if (!foundAvailableChannel)
+            {
+                dataRateOk = false;
+                NS_LOG_DEBUG("Available channel not found");
             }
         }
-
-        if (!foundAvailableChannel)
-        {
-            dataRateOk = false;
-            NS_LOG_DEBUG("Available channel not found");
-        }
     }
 
-    // Check the txPower
-    ////////////////////
-    // Check whether we can use this transmission power
-    if (GetDbmForTxPower(txPower) == -1)
+    // In LinkADRReq, TXPower = 0xF means "keep current tx power".
+    // Only validate and apply txPower when a new value is actually requested.
+    if (txPower != 0xF) // If value is 0xF, ignore config.
     {
-        txPowerOk = false;
+        // Check if it is acceptable
+        if (GetDbmForTxPower(txPower) < 0)
+        {
+            NS_LOG_WARN("Invalid tx power");
+            txPowerOk = false;
+        }
     }
 
     NS_LOG_DEBUG("Finished checking. " << "ChannelMaskOk: " << channelMaskOk << ", "
                                        << "DataRateOk: " << dataRateOk << ", "
-                                       << "txPowerOk: " << txPowerOk);
+                                       << "txPowerOk: " << txPowerOk << " | Dev Addr.: " << m_address);
 
     // If all checks are successful, set parameters up
     //////////////////////////////////////////////////
@@ -698,14 +695,21 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
             }
         }
 
-        // Set the data rate
-        m_dataRate = dataRate;
+        if (txPower != 0xF) // If value is 0xF, ignore config.
+        {
+            m_txPower = GetDbmForTxPower(txPower);
+        }
 
-        // Set the transmission power
-        m_txPower = GetDbmForTxPower(txPower);
+        if (dataRate != 0xF) // If value is 0xF, ignore config.
+        {
+            m_dataRate = dataRate;
+        }
+
 
         // Set the number of redundant transmissions
         m_nbTrans = repetitions;
+
+        NS_LOG_DEBUG("DR: " << unsigned(m_dataRate) << " | TX Power: " << m_txPower << " | m_nbTrans: " << unsigned(m_nbTrans) << " | Dev Addr.: " << m_address);
     }
 
     // Craft a LinkAdrAns MAC command as a response

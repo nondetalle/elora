@@ -41,7 +41,7 @@ BaseEndDeviceLorawanMac::GetTypeId()
                           MakeUintegerChecker<uint8_t>(0, 5))
             .AddAttribute("ADRBit",
                           "Whether to request the NS to control this device's Data Rate",
-                          BooleanValue(),
+                          BooleanValue(true),
                           MakeBooleanAccessor(&BaseEndDeviceLorawanMac::m_ADRBit),
                           MakeBooleanChecker())
             .AddAttribute("NbTrans",
@@ -117,7 +117,7 @@ BaseEndDeviceLorawanMac::BaseEndDeviceLorawanMac()
       // Private Header fields
       m_fType(LorawanMacHeader::UNCONFIRMED_DATA_UP),
       m_address(LoraDeviceAddress(0)),
-      m_ADRBit(false),
+      m_ADRBit(true),
       m_fCnt(0),
       // Private MAC layer settings
       m_enableADRBackoff(false),

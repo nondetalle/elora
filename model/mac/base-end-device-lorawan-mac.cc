@@ -601,15 +601,6 @@ BaseEndDeviceLorawanMac::OnLinkCheckAns(uint8_t margin, uint8_t gwCnt)
     m_lastKnownGatewayCount = gwCnt;
 }
 
-// Handle LinkADRReq special values according to LoRaWAN ADR semantics.
-// DataRate = 0xF and TXPower = 0xF mean "keep current value", so these
-// fields must not be validated or applied as new settings.
-//
-// References:
-// - Semtech Learn: https://learn.semtech.com/mod/book/view.php?id=174&chapterid=159
-// - See also signetlabdei/lorawan, model/end-device-lorawan-mac.cc:
-// - https://github.com/signetlabdei/lorawan/blob/develop/model/end-device-lorawan-mac.cc
-
 void
 BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
                                       uint8_t txPower,
@@ -617,106 +608,178 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
                                       uint8_t chMaskCntl,
                                       uint8_t nbTrans)
 {
-    NS_LOG_FUNCTION(this << unsigned(dataRate) << unsigned(txPower) << repetitions);
+    NS_LOG_FUNCTION(this << unsigned(dataRate) << unsigned(txPower) << enabledChannels
+                         << unsigned(chMaskCntl) << unsigned(nbTrans));
 
-    // Three bools for three requirements before setting things up
-    bool channelMaskOk = !enabledChannels.empty();
-    bool dataRateOk = true;
-    bool txPowerOk = true;
+    // Adapted from: github.com/Lora-net/SWL2001.git v4.3.1
+    // For the time being, this implementation is valid for the EU868 region
 
-    // Check the channel mask
-    /////////////////////////
-    // Check whether all specified channels exist on this device
-    for (auto& chIndex : enabledChannels)
+    NS_ASSERT_MSG(!(dataRate & 0xF0), "dataRate field > 4 bits");
+    NS_ASSERT_MSG(!(txPower & 0xF0), "txPower field > 4 bits");
+    NS_ASSERT_MSG(!(chMaskCntl & 0xF8), "chMaskCntl field > 3 bits");
+    NS_ASSERT_MSG(!(nbTrans & 0xF0), "nbTrans field > 4 bits");
+
+    bool channelMaskAck = true;
+    bool dataRateAck = true;
+    bool powerAck = true;
+
+    // Check channel mask
+    switch (chMaskCntl)
     {
-        if (!m_channelManager->GetChannel(chIndex))
+    // Channels 0 to 15
+    case 0:
+        // Check whether all specified channels exist on this device
+        for (auto& i : enabledChannels)
         {
-            channelMaskOk = false;
-            break;
-        }
-    }
-    
-    // In LinkADRReq, DataRate = 0xF means "keep current data rate".
-    // It must not be validated as a new DR value or applied to m_dataRate.
-    if (dataRate != 0xF){
-        if(channelMaskOk){
-            bool foundAvailableChannel = false;
-            for (auto& chIndex : enabledChannels)
+            if (!m_channelManager->GetChannel(i))
             {
-                auto ch = m_channelManager->GetChannel(chIndex);
-                NS_LOG_DEBUG("MinDR: " << unsigned(ch->GetMinimumDataRate()));
-                NS_LOG_DEBUG("MaxDR: " << unsigned(ch->GetMaximumDataRate()));
-                if (ch->GetMinimumDataRate() <= dataRate && ch->GetMaximumDataRate() >= dataRate)
-                {
-                    foundAvailableChannel = true;
+                NS_LOG_WARN("Invalid channel mask");
+                channelMaskAck = false;
+                break; // break for loop
+            }
+        }
+        break;
+    // All channels ON independently of the ChMask field value
+    case 6:
+        enabledChannels.clear();
+        for (size_t i = 0; i < 256; ++i)
+        {
+            if (m_channelManager->GetChannel(i))
+            {
+                enabledChannels.emplace_back(i);
+            }
+        }
+        break;
+    default:
+        NS_LOG_WARN("Invalid channel mask ctrl field");
+        channelMaskAck = false;
+        break;
+    }
+
+    // check if all channels are disabled
+    if (enabledChannels.empty())
+    {
+        NS_LOG_WARN("Invalid channel mask");
+        channelMaskAck = false;
+    }
+
+    // Temporary channel mask is built and validated
+    if (!m_ADRBit) // ADR disabled, only consider channel mask conf.
+    {
+        /// @remark Original code considers this to be mobile-mode
+        if (channelMaskAck) // valid channel mask
+        {
+            bool compatible = false;
+            // Look for enabled channel that supports current data rate.
+            for (auto& i : enabledChannels)
+            {
+                if (m_dataRate >= m_channelManager->GetChannel(i)->GetMinimumDataRate() &&
+                    m_dataRate <= m_channelManager->GetChannel(i)->GetMaximumDataRate())
+                { // Found compatible channel, break loop
+                    compatible = true;
                     break;
                 }
             }
-
-            if (!foundAvailableChannel)
+            if (!compatible)
             {
-                dataRateOk = false;
-                NS_LOG_DEBUG("Available channel not found");
+                NS_LOG_WARN("Invalid channel mask for current device data rate (ADR off)");
+                channelMaskAck = dataRateAck = powerAck = false; // reject all configurations
+            }
+            else // apply channel mask configuration
+            {
+                for (size_t i = 0; i < 256; ++i)
+                {
+                    if (auto c = m_channelManager->GetChannel(i); c)
+                    {
+                        (std::find(enabledChannels.begin(), enabledChannels.end(), i) !=
+                         enabledChannels.end())
+                            ? c->EnableForUplink()
+                            : c->DisableForUplink();
+                    }
+                }
+                dataRateAck = powerAck = false; // only ack channel mask
             }
         }
-    }
-
-    // In LinkADRReq, TXPower = 0xF means "keep current tx power".
-    // Only validate and apply txPower when a new value is actually requested.
-    if (txPower != 0xF) // If value is 0xF, ignore config.
-    {
-        // Check if it is acceptable
-        if (GetDbmForTxPower(txPower) < 0)
+        else // reject
         {
-            NS_LOG_WARN("Invalid tx power");
-            txPowerOk = false;
+            NS_LOG_WARN("Invalid channel mask");
+            dataRateAck = powerAck = false; // reject all configurations
         }
     }
-
-    NS_LOG_DEBUG("Finished checking. " << "ChannelMaskOk: " << channelMaskOk << ", "
-                                       << "DataRateOk: " << dataRateOk << ", "
-                                       << "txPowerOk: " << txPowerOk << " | Dev Addr.: " << m_address);
-
-    // If all checks are successful, set parameters up
-    //////////////////////////////////////////////////
-    if (channelMaskOk && dataRateOk && txPowerOk)
+    else // Server-side ADR is enabled
     {
-        // Cycle over all channels in the list
-        for (uint32_t i = 0; i < m_channelManager->GetChannelList().size(); i++)
+        if (dataRate != 0xF) // If value is 0xF, ignore config.
         {
-            if (std::find(enabledChannels.begin(), enabledChannels.end(), i) !=
-                enabledChannels.end())
+            bool compatible = false;
+            // Look for enabled channel that supports config. data rate.
+            for (auto i : enabledChannels) // all enabled by chMask, even if it was invalid
             {
-                m_channelManager->GetChannelList().at(i)->EnableForUplink();
-                NS_LOG_DEBUG("Channel " << i << " enabled");
+                if (const auto& c = m_channelManager->GetChannel(i); c) // exists
+                {
+                    if (dataRate >= c->GetMinimumDataRate() && dataRate <= c->GetMaximumDataRate())
+                    { // Found compatible channel, break loop
+                        compatible = true;
+                        break;
+                    }
+                }
+                else // manages invalid case, checks with defaults
+                {
+                    if (GetSfFromDataRate(dataRate) && GetBandwidthFromDataRate(dataRate))
+                    { // Found compatible (invalid) channel, break loop
+                        compatible = true;
+                        break;
+                    }
+                }
             }
-            else
+
+            // Check if it is acceptable
+            if (!compatible)
             {
-                m_channelManager->GetChannelList().at(i)->DisableForUplink();
-                NS_LOG_DEBUG("Channel " << i << " disabled");
+                NS_LOG_WARN("Invalid data rate");
+                dataRateAck = false;
             }
         }
 
         if (txPower != 0xF) // If value is 0xF, ignore config.
         {
-            m_txPower = GetDbmForTxPower(txPower);
+            // Check if it is acceptable
+            if (GetDbmForTxPower(txPower) < 0)
+            {
+                NS_LOG_WARN("Invalid tx power");
+                powerAck = false;
+            }
         }
 
-        if (dataRate != 0xF) // If value is 0xF, ignore config.
+        // If no error, apply configurations
+        if (channelMaskAck && dataRateAck && powerAck)
         {
-            m_dataRate = dataRate;
+            for (size_t i = 0; i < 256; ++i)
+            {
+                if (auto c = m_channelManager->GetChannel(i); c)
+                {
+                    (std::find(enabledChannels.begin(), enabledChannels.end(), i) !=
+                     enabledChannels.end())
+                        ? c->EnableForUplink()
+                        : c->DisableForUplink();
+                }
+            }
+            if (txPower != 0xF) // If value is 0xF, ignore config.
+            {
+                m_txPower = GetDbmForTxPower(txPower);
+            }
+            m_nbTrans = (nbTrans == 0) ? 1 : nbTrans;
+            if (dataRate != 0xF) // If value is 0xF, ignore config.
+            {
+                m_dataRate = dataRate;
+            }
+            NS_LOG_DEBUG("MacTxDataRateAdr = " << unsigned(m_dataRate));
+            NS_LOG_DEBUG("MacTxPower = " << unsigned(m_txPower) << "dBm");
+            NS_LOG_DEBUG("MacNbTrans = " << unsigned(m_nbTrans));
         }
-
-
-        // Set the number of redundant transmissions
-        m_nbTrans = repetitions;
-
-        NS_LOG_DEBUG("DR: " << unsigned(m_dataRate) << " | TX Power: " << m_txPower << " | m_nbTrans: " << unsigned(m_nbTrans) << " | Dev Addr.: " << m_address);
     }
 
-    // Craft a LinkAdrAns MAC command as a response
-    ///////////////////////////////////////////////
-    m_fOpts.emplace_back(Create<LinkAdrAns>(txPowerOk, dataRateOk, channelMaskOk));
+    NS_LOG_INFO("Adding LinkAdrAns reply");
+    m_fOpts.emplace_back(Create<LinkAdrAns>(powerAck, dataRateAck, channelMaskAck));
 }
 
 void

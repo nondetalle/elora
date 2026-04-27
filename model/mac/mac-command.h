@@ -241,11 +241,19 @@ class LinkAdrReq : public MacCommand
     std::list<int> GetEnabledChannelsList();
 
     /**
+     * Get the ChMaskCntl field, used as an indicator of the 16-channel bank to apply the ChMask to.
+     * The interpretation of this field is region-dependent.
+     *
+     * \return The ChMaskCntl field.
+     */
+    uint8_t GetChMaskCntl();
+
+    /**
      * Get the number of repetitions prescribed by this MAC command.
      *
      * \return The number of repetitions.
      */
-    int GetRepetitions();
+    uint8_t GetRepetitions();
 
   private:
     uint8_t m_dataRate;

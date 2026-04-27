@@ -477,6 +477,7 @@ BaseEndDeviceLorawanMac::ApplyMACCommands(LoraFrameHeader fHdr, Ptr<const Packet
             OnLinkAdrReq(linkAdrReq->GetDataRate(),
                          linkAdrReq->GetTxPower(),
                          linkAdrReq->GetEnabledChannelsList(),
+                         linkAdrReq->GetChMaskCntl(),
                          linkAdrReq->GetRepetitions());
             break;
         }
@@ -613,7 +614,8 @@ void
 BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
                                       uint8_t txPower,
                                       std::list<int> enabledChannels,
-                                      int repetitions)
+                                      uint8_t chMaskCntl,
+                                      uint8_t nbTrans)
 {
     NS_LOG_FUNCTION(this << unsigned(dataRate) << unsigned(txPower) << repetitions);
 

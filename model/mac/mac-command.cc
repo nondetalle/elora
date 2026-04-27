@@ -346,7 +346,14 @@ LinkAdrReq::GetEnabledChannelsList()
     return channelIndices;
 }
 
-int
+uint8_t
+LinkAdrReq::GetChMaskCntl()
+{
+    NS_LOG_FUNCTION(this);
+    return m_chMaskCntl;
+}
+
+uint8_t
 LinkAdrReq::GetRepetitions()
 {
     NS_LOG_FUNCTION(this);

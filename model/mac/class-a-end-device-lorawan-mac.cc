@@ -241,6 +241,14 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
         return;
     }
 
+    // Update frame counters
+    m_fCnt++;
+    if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
+    {
+        m_ADRACKCnt++;
+    }
+
+    // Tracing
     uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
     // Acknowledgement success of confirmed txs
     if (recv && needAck && gotAck)
@@ -248,7 +256,6 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
         m_requiredTxCallback(txs, true, m_txContext.firstAttempt, m_txContext.packet);
         NS_LOG_DEBUG("Received ACK packet after "
                      << unsigned(txs) << " transmissions: stopping retransmission procedure. ");
-        return;
     }
     // Acknowledgement failure of confirmed txs
     else if (needAck && !gotAck && !canReTx)
@@ -256,7 +263,6 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
         m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
         NS_LOG_DEBUG("Ack failure: no more retransmissions left. Used " << unsigned(txs)
                                                                         << " transmissions.");
-        return;
     }
 }
 

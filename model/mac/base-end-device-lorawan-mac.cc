@@ -112,13 +112,13 @@ BaseEndDeviceLorawanMac::BaseEndDeviceLorawanMac()
       m_txPower(14),
       m_nbTrans(1),
       // Protected MAC layer context
+      m_fCnt(0),
       m_ADRACKCnt(0),
       m_ADRACKReq(false),
       // Private Header fields
       m_fType(LorawanMacHeader::UNCONFIRMED_DATA_UP),
       m_address(LoraDeviceAddress(0)),
       m_ADRBit(false),
-      m_fCnt(0),
       // Private MAC layer settings
       m_enableADRBackoff(false),
       m_enableCrypto(false),
@@ -205,16 +205,22 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
     // If this is the transmission of a new packet, overwrite context
     if (packetIsNew)
     {
-        // Tracing: previous packet was not acknowledged, reTxs procedure interrupted
+        // Previous packet was not acknowledged, reTxs procedure interrupted
         if (m_txContext.nbTxLeft && m_txContext.waitingAck)
         {
-            // Call the callback to notify about the failure
+            // Tracing: call the callback to notify about the failure
             uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
             m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
             NS_LOG_DEBUG(" Received new packet from the application layer: stopping retransmission "
                          "procedure. Previous packet not acknowledged. Used "
                          << unsigned(txs) << " transmissions out of a maximum of "
                          << unsigned(m_nbTrans) << ".");
+            // Update frame counters (normally updated after exausting all reTxs)
+            m_fCnt++;
+            if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
+            {
+                m_ADRACKCnt++;
+            }
         }
         m_txContext = {Simulator::Now(),
                        packet,
@@ -272,15 +278,9 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
     SendToPhy(packet);
     // Decrease transmissions counter
     m_txContext.nbTxLeft--;
+    // Fire trace source
     if (packetIsNew)
     {
-        // Increase frame counter
-        m_fCnt++;
-        if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
-        {
-            m_ADRACKCnt++;
-        }
-        // Fire trace source
         m_sentNewPacket(packet);
     }
 }

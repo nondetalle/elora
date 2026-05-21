@@ -173,7 +173,7 @@ BaseEndDeviceLorawanMac::GetNextTransmissionDelay()
     for (const auto& llc : m_channelManager->GetEnabledChannelList())
     {
         waitingTime = std::min(waitingTime, m_channelManager->GetWaitingTime(llc));
-        NS_LOG_DEBUG("Waiting time before the next transmission in channel with frequecy "
+        NS_LOG_DEBUG("Waiting time before the next transmission in channel with frequency "
                      << llc->GetFrequency() << " is = " << waitingTime.GetSeconds() << ".");
     }
 
@@ -205,23 +205,28 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
     // If this is the transmission of a new packet, overwrite context
     if (packetIsNew)
     {
-        // Previous packet was not acknowledged, reTxs procedure interrupted
-        if (m_txContext.nbTxLeft && m_txContext.waitingAck)
+        // If re-transmissions of last packet were interrupted, update frame counters
+        if (m_txContext.nbTxLeft)
         {
-            // Tracing: call the callback to notify about the failure
-            uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
-            m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
-            NS_LOG_DEBUG(" Received new packet from the application layer: stopping retransmission "
-                         "procedure. Previous packet not acknowledged. Used "
-                         << unsigned(txs) << " transmissions out of a maximum of "
-                         << unsigned(m_nbTrans) << ".");
-            // Update frame counters (normally updated after exausting all reTxs)
+            // Trace if previous confirmed packet was not acknowledged
+            if (m_txContext.waitingAck)
+            {
+                uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
+                m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
+                NS_LOG_DEBUG(
+                    " Received new packet from the application layer: stopping retransmission "
+                    "procedure. Previous packet not acknowledged. Used "
+                    << unsigned(txs) << " transmissions out of a maximum of " << unsigned(m_nbTrans)
+                    << ".");
+            }
+            // Update frame counter and ADRACKCnt (normally updated after exhausting all reTxs)
             m_fCnt++;
             if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
             {
                 m_ADRACKCnt++;
             }
         }
+        // Reset reTx context
         m_txContext = {Simulator::Now(),
                        packet,
                        m_nbTrans,

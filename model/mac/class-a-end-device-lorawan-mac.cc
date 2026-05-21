@@ -241,9 +241,10 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
         return;
     }
 
-    // Update frame counters
+    // Update uplink frame counter
     m_fCnt++;
-    if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
+    // Update ADRACKCnt only if nothing was received
+    if (!recv && m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
     {
         m_ADRACKCnt++;
     }

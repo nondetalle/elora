@@ -194,7 +194,7 @@ ClassAEndDeviceLorawanMac::FailedReception(Ptr<const Packet> packet)
     NS_LOG_FUNCTION(this << packet);
     // Ensure device is sleeping without canceling future reception windows
     m_rwm->ForceSleep();
-    // Check if we have exahusted the reception windows
+    // Check if we have exhausted the reception windows
     if (m_rwm->NoMoreWindows())
     {
         ManageRetransmissions(FAIL);
@@ -241,15 +241,7 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
         return;
     }
 
-    // Update uplink frame counter
-    m_fCnt++;
-    // Update ADRACKCnt only if nothing was received
-    if (!recv && m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
-    {
-        m_ADRACKCnt++;
-    }
-
-    // Tracing
+    // Tracing: end of re-transmission procedure
     uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
     // Acknowledgement success of confirmed txs
     if (recv && needAck && gotAck)
@@ -259,11 +251,23 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
                      << unsigned(txs) << " transmissions: stopping retransmission procedure. ");
     }
     // Acknowledgement failure of confirmed txs
+    // (either exhausted all reTxs or new pkt scheduled while busy)
     else if (needAck && !gotAck && !canReTx)
     {
         m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
-        NS_LOG_DEBUG("Ack failure: no more retransmissions left. Used " << unsigned(txs)
-                                                                        << " transmissions.");
+        NS_LOG_DEBUG("Ack failure: no more retransmission opportunities. Used "
+                     << unsigned(txs) << " transmissions.");
+    }
+
+    // Exhaust remaining re-transmissions
+    m_txContext.nbTxLeft = 0;
+
+    // Update uplink frame counter
+    m_fCnt++;
+    // Update ADRACKCnt only if nothing was received
+    if (!recv && m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
+    {
+        m_ADRACKCnt++;
     }
 }
 

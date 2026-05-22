@@ -227,11 +227,11 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
             }
         }
         // Reset reTx context
-        m_txContext = {Simulator::Now(),
-                       packet,
-                       m_nbTrans,
-                       m_fType == LorawanMacHeader::CONFIRMED_DATA_UP,
-                       false};
+        m_txContext = {.firstAttempt = Simulator::Now(),
+                       .packet = packet,
+                       .nbTxLeft = m_nbTrans,
+                       .waitingAck = (m_fType == LorawanMacHeader::CONFIRMED_DATA_UP),
+                       .busy = false};
         NS_LOG_DEBUG("New APP packet: " << packet << ".");
     }
     else // Retransmission

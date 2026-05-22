@@ -43,6 +43,8 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     {
         Time firstAttempt;
         Ptr<Packet> packet = nullptr;
+        uint16_t fcnt; // to Track the last fcnt
+        uint16_t adrackcnt;  // to Track the last adrackcnt
         uint8_t nbTxLeft;
         bool waitingAck = false;
         bool busy = false;

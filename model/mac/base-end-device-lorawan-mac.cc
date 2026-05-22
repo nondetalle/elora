@@ -225,6 +225,9 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
     }
     else // Retransmission
     {
+        // Getting the last fcnt and adrackcnt from the context
+        m_fCnt = m_txContext.fcnt;
+        m_ADRACKCnt = m_txContext.adrackcnt;
         // Remove MIC and headers
         packet->RemoveAtEnd(4);
         LorawanMacHeader mHdr;
@@ -232,6 +235,11 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
         LoraFrameHeader fHdr;
         fHdr.SetAsUplink();
         packet->RemoveHeader(fHdr);
+
+        if(m_txContext.nbTxLeft == 1){
+            // Set the check true in order to update the fcnt adrackcnt later
+            packetIsNew=true;
+        }
         NS_LOG_DEBUG("Retransmitting an old packet.");
     }
 

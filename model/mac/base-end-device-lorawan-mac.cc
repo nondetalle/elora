@@ -218,6 +218,8 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
         }
         m_txContext = {Simulator::Now(),
                        packet,
+                       m_fCnt,
+                       m_ADRACKCnt,
                        m_nbTrans,
                        m_fType == LorawanMacHeader::CONFIRMED_DATA_UP,
                        false};

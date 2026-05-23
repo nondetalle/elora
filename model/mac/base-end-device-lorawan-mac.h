@@ -184,18 +184,6 @@ class BaseEndDeviceLorawanMac : public LorawanMac
      */
     uint8_t GetNumberOfTransmissions() const;
 
-    /**
-     * Enable data rate adaptation in the retransmitting procedure.
-     *
-     * \param adapt If the data rate adaptation is enabled or not.
-     */
-    void SetADRBackoff(bool adapt);
-
-    /**
-     * Get if data rate adaptation is enabled or not.
-     */
-    bool GetADRBackoff() const;
-
   protected:
     void DoInitialize() override;
     void DoDispose() override;
@@ -459,16 +447,11 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     /**
      * Whether this device's data rate should be controlled by the NS.
      */
-    bool m_ADRBit;
+    bool m_adr;
 
     ////////////////////////////////
     // Private MAC Layer settings //
     ////////////////////////////////
-
-    /**
-     * Enable Data Rate adaptation during the retransmission procedure.
-     */
-    bool m_enableADRBackoff;
 
     /**
      * Whether this device's should use cryptography according to specifications.

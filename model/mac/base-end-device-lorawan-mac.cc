@@ -41,22 +41,20 @@ BaseEndDeviceLorawanMac::GetTypeId()
                           UintegerValue(0),
                           MakeUintegerAccessor(&BaseEndDeviceLorawanMac::m_dataRate),
                           MakeUintegerChecker<uint8_t>(0, 5))
-            .AddAttribute("ADRBit",
-                          "Whether to request the NS to control this device's Data Rate",
-                          BooleanValue(true),
-                          MakeBooleanAccessor(&BaseEndDeviceLorawanMac::m_ADRBit),
-                          MakeBooleanChecker())
+            .AddAttribute(
+                "ADR",
+                "Ensure to the network server that this device will accept data rate, transmission "
+                "power and number of retransmissions configurations received via LinkADRReq. This "
+                "also allows the device's local ADR backoff procedure to reset configurations in "
+                "case of connectivity loss.",
+                BooleanValue(true),
+                MakeBooleanAccessor(&BaseEndDeviceLorawanMac::m_adr),
+                MakeBooleanChecker())
             .AddAttribute("NbTrans",
                           "Default number of transmissions for each packet",
                           IntegerValue(1),
                           MakeIntegerAccessor(&BaseEndDeviceLorawanMac::m_nbTrans),
                           MakeIntegerChecker<uint8_t>())
-            .AddAttribute("ADRBackoff",
-                          "Whether the End Device should up its Data Rate "
-                          "in case it doesn't get a reply from the NS.",
-                          BooleanValue(false),
-                          MakeBooleanAccessor(&BaseEndDeviceLorawanMac::m_enableADRBackoff),
-                          MakeBooleanChecker())
             .AddAttribute(
                 "FType",
                 "Specify type of message will be sent by this ED.",
@@ -120,9 +118,7 @@ BaseEndDeviceLorawanMac::BaseEndDeviceLorawanMac()
       // Private Header fields
       m_fType(LorawanMacHeader::UNCONFIRMED_DATA_UP),
       m_address(LoraDeviceAddress(0)),
-      m_ADRBit(true),
       // Private MAC layer settings
-      m_enableADRBackoff(false),
       m_enableCrypto(false),
       m_aggregatedDutyCycle(1),
       // Private MAC layer context
@@ -248,7 +244,7 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
         NS_LOG_DEBUG("Retransmitting an old packet.");
     }
 
-    if (m_enableADRBackoff)
+    if (m_adr)
     {
         // ADR backoff as in LoRaWAN specification, V1.0.4 (2020)
         ExecuteADRBackoff();
@@ -388,7 +384,7 @@ BaseEndDeviceLorawanMac::FillHeader(LoraFrameHeader& fHdr)
     fHdr.SetAsUplink();
     fHdr.SetFPort(1); // TODO Use an appropriate frame port based on the application
     fHdr.SetAddress(m_address);
-    fHdr.SetAdr(m_ADRBit);
+    fHdr.SetAdr(m_adr);
     fHdr.SetAdrAckReq(m_ADRACKReq);
 
     // FPending does not exist in uplink messages
@@ -673,7 +669,7 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
     }
 
     // Temporary channel mask is built and validated
-    if (!m_ADRBit) // ADR disabled, only consider channel mask conf.
+    if (!m_adr) // ADR disabled, only consider channel mask conf.
     {
         /// @remark Original code considers this to be mobile-mode
         if (channelMaskAck) // valid channel mask
@@ -936,18 +932,6 @@ uint8_t
 BaseEndDeviceLorawanMac::GetNumberOfTransmissions() const
 {
     return m_nbTrans;
-}
-
-void
-BaseEndDeviceLorawanMac::SetADRBackoff(bool backoff)
-{
-    m_enableADRBackoff = backoff;
-}
-
-bool
-BaseEndDeviceLorawanMac::GetADRBackoff() const
-{
-    return m_enableADRBackoff;
 }
 
 void

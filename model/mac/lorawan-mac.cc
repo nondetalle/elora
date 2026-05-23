@@ -132,7 +132,7 @@ LorawanMac::GetSfFromDataRate(uint8_t dataRate)
     NS_LOG_FUNCTION(this << unsigned(dataRate));
 
     // Check we are in range
-    if (dataRate >= m_sfForDataRate.size() - 1)
+    if (dataRate > m_sfForDataRate.size() - 1)
     {
         return 0;
     }

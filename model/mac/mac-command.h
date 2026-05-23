@@ -193,6 +193,8 @@ class LinkCheckAns : public MacCommand
 };
 
 /**
+ * @ingroup lorawan
+ *
  * Implementation of the LinkAdrReq LoRaWAN MAC command.
  *
  * With this command, the network server can request a device to change its
@@ -202,13 +204,28 @@ class LinkCheckAns : public MacCommand
 class LinkAdrReq : public MacCommand
 {
   public:
-    LinkAdrReq();
+    LinkAdrReq(); //!< Default constructor
 
+    /**
+     * Constructor with given fields.
+     *
+     * The parameters of this constructor are serializable fields of the MAC command specified by
+     * the LoRaWAN protocol. They represent MAC and PHY layer configurations to be applied by the
+     * receiving end device. See, [LoRaWAN® L2 1.0.4 Specification (TS001-1.0.4)] and [LoRaWAN®
+     * Regional Parameters RP002-1.0.4] for more details on how the fields are used and which
+     * physical values they stand for.
+     *
+     * @param dataRate The DataRate field to set.
+     * @param txPower The TXPower field to set.
+     * @param chMask The ChMask field to set.
+     * @param chMaskCntl The ChMaskCntl field to set.
+     * @param nbTrans The NbTrans field to set.
+     */
     LinkAdrReq(uint8_t dataRate,
                uint8_t txPower,
-               uint16_t channelMask,
+               uint16_t chMask,
                uint8_t chMaskCntl,
-               uint8_t nbRep);
+               uint8_t nbTrans);
 
     void Serialize(Buffer::Iterator& start) const override;
     uint8_t Deserialize(Buffer::Iterator& start) override;
@@ -217,9 +234,9 @@ class LinkAdrReq : public MacCommand
     /**
      * Return the data rate prescribed by this MAC command.
      *
-     * \return An unsigned 8-bit integer containing the data rate.
+     * @return An unsigned 8-bit integer containing the data rate.
      */
-    uint8_t GetDataRate();
+    uint8_t GetDataRate() const;
 
     /**
      * Get the transmission power prescribed by this MAC command.
@@ -228,39 +245,41 @@ class LinkAdrReq : public MacCommand
      * dBm when communicating it to the PHY, and the translation will vary based
      * on the region of the device.
      *
-     * \return The TX power, encoded as an unsigned 8-bit integer.
+     * @return The TX power, encoded as an unsigned 8-bit integer.
      */
-    uint8_t GetTxPower();
+    uint8_t GetTxPower() const;
 
     /**
-     * Get the list of enabled channels. This method takes the 16-bit channel mask
-     * and translates it to a list of integers that can be more easily parsed.
+     * Get the 16 bit mask of enabled channels.
      *
-     * \return The list of enabled channels.
+     * @return The 16 bit channel mask.
      */
-    std::list<int> GetEnabledChannelsList();
+    uint16_t GetChMask() const;
 
     /**
      * Get the ChMaskCntl field, used as an indicator of the 16-channel bank to apply the ChMask to.
+     *
      * The interpretation of this field is region-dependent.
      *
-     * \return The ChMaskCntl field.
+     * @return The ChMaskCntl field.
      */
-    uint8_t GetChMaskCntl();
+    uint8_t GetChMaskCntl() const;
 
     /**
-     * Get the number of repetitions prescribed by this MAC command.
+     * Get the number of repeated transmissions prescribed by this MAC command.
      *
-     * \return The number of repetitions.
+     * @return The number of repeated transmissions.
      */
-    uint8_t GetRepetitions();
+    uint8_t GetNbTrans() const;
 
   private:
-    uint8_t m_dataRate;
-    uint8_t m_txPower;
-    uint16_t m_channelMask;
-    uint8_t m_chMaskCntl;
-    uint8_t m_nbRep;
+    uint8_t m_dataRate;   //!< The DataRate field, a serializable parameter for setting the
+                          //!< spreading factor and bandwidth of end devices
+    uint8_t m_txPower;    //!< The TXPower field, a serializable parameter for setting the
+                          //!< transmission power of end devices
+    uint16_t m_chMask;    //!< The ChMask field
+    uint8_t m_chMaskCntl; //!< The ChMaskCntl field
+    uint8_t m_nbTrans;    //!< The NbTrans field
 };
 
 /**

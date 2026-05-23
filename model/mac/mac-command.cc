@@ -247,24 +247,26 @@ LinkCheckAns::IncrementGwCnt()
 LinkAdrReq::LinkAdrReq()
 {
     NS_LOG_FUNCTION(this);
-
     m_commandType = LINK_ADR_REQ;
     m_serializedSize = 5;
 }
 
 LinkAdrReq::LinkAdrReq(uint8_t dataRate,
                        uint8_t txPower,
-                       uint16_t channelMask,
+                       uint16_t chMask,
                        uint8_t chMaskCntl,
-                       uint8_t nbRep)
+                       uint8_t nbTrans)
     : m_dataRate(dataRate),
       m_txPower(txPower),
-      m_channelMask(channelMask),
+      m_chMask(chMask),
       m_chMaskCntl(chMaskCntl),
-      m_nbRep(nbRep)
+      m_nbTrans(nbTrans)
 {
     NS_LOG_FUNCTION(this);
-
+    NS_ASSERT_MSG(!(dataRate & 0xF0), "dataRate field > 4 bits");
+    NS_ASSERT_MSG(!(txPower & 0xF0), "txPower field > 4 bits");
+    NS_ASSERT_MSG(!(chMaskCntl & 0xF8), "chMaskCntl field > 3 bits");
+    NS_ASSERT_MSG(!(nbTrans & 0xF0), "nbTrans field > 4 bits");
     m_commandType = LINK_ADR_REQ;
     m_serializedSize = 5;
 }
@@ -272,93 +274,74 @@ LinkAdrReq::LinkAdrReq(uint8_t dataRate,
 void
 LinkAdrReq::Serialize(Buffer::Iterator& start) const
 {
-    NS_LOG_FUNCTION_NOARGS();
-
-    // Write the CID
-    start.WriteU8(GetCIDFromMacCommand(m_commandType));
+    NS_LOG_FUNCTION(this);
+    start.WriteU8(GetCIDFromMacCommand(m_commandType)); // Write the CID
     start.WriteU8(m_dataRate << 4 | (m_txPower & 0b1111));
-    start.WriteU16(m_channelMask);
-    start.WriteU8(m_chMaskCntl << 4 | (m_nbRep & 0b1111));
+    start.WriteU16(m_chMask);
+    start.WriteU8(m_chMaskCntl << 4 | (m_nbTrans & 0b1111));
 }
 
 uint8_t
 LinkAdrReq::Deserialize(Buffer::Iterator& start)
 {
-    NS_LOG_FUNCTION_NOARGS();
-
-    // Consume the CID
-    start.ReadU8();
+    NS_LOG_FUNCTION(this);
+    start.ReadU8(); // Consume the CID
     uint8_t firstByte = start.ReadU8();
     m_dataRate = firstByte >> 4;
     m_txPower = firstByte & 0b1111;
-    m_channelMask = start.ReadU16();
+    m_chMask = start.ReadU16();
     uint8_t fourthByte = start.ReadU8();
     m_chMaskCntl = fourthByte >> 4;
-    m_nbRep = fourthByte & 0b1111;
-
+    m_nbTrans = fourthByte & 0b1111;
     return m_serializedSize;
 }
 
 void
 LinkAdrReq::Print(std::ostream& os) const
 {
-    NS_LOG_FUNCTION_NOARGS();
-
-    os << "LinkAdrReq" << std::endl;
-    os << "dataRate: " << unsigned(m_dataRate) << std::endl;
-    os << "txPower: " << unsigned(m_txPower) << std::endl;
-    os << "channelMask: " << std::bitset<16>(m_channelMask) << std::endl;
-    os << "chMaskCntl: " << unsigned(m_chMaskCntl) << std::endl;
-    os << "nbRep: " << unsigned(m_nbRep) << std::endl;
+    NS_LOG_FUNCTION(this);
+    os << "LinkAdrReq(";
+    os << "DataRate=" << unsigned(m_dataRate);
+    os << ", TXPower=" << unsigned(m_txPower);
+    os << ", ChMask=" << std::bitset<16>(m_chMask);
+    os << ", ChMaskCntl=" << unsigned(m_chMaskCntl);
+    os << ", NbTrans=" << unsigned(m_nbTrans);
+    os << ")";
 }
 
 uint8_t
-LinkAdrReq::GetDataRate()
+LinkAdrReq::GetDataRate() const
 {
     NS_LOG_FUNCTION(this);
-
     return m_dataRate;
 }
 
 uint8_t
-LinkAdrReq::GetTxPower()
+LinkAdrReq::GetTxPower() const
 {
     NS_LOG_FUNCTION(this);
-
     return m_txPower;
 }
 
-std::list<int>
-LinkAdrReq::GetEnabledChannelsList()
+uint16_t
+LinkAdrReq::GetChMask() const
 {
     NS_LOG_FUNCTION(this);
-
-    std::list<int> channelIndices;
-    for (int i = 0; i < 16; i++)
-    {
-        if (m_channelMask & (0b1 << i)) // Take channel mask's i-th bit
-        {
-            NS_LOG_DEBUG("Adding channel index " << i);
-            channelIndices.push_back(i);
-        }
-    }
-
-    return channelIndices;
+    return m_chMask;
 }
 
 uint8_t
-LinkAdrReq::GetChMaskCntl()
+LinkAdrReq::GetChMaskCntl() const
 {
     NS_LOG_FUNCTION(this);
     return m_chMaskCntl;
 }
 
 uint8_t
-LinkAdrReq::GetRepetitions()
+LinkAdrReq::GetNbTrans() const
 {
     NS_LOG_FUNCTION(this);
-
-    return (m_nbRep) ? m_nbRep : 1;
+    return m_nbTrans;
 }
 
 ////////////////

@@ -46,8 +46,7 @@ ClassAEndDeviceLorawanMac::GetTypeId()
 }
 
 ClassAEndDeviceLorawanMac::ClassAEndDeviceLorawanMac()
-    : m_recvWinSymb(8),
-      // LoRaWAN default
+    : // LoRaWAN default
       m_rx1DrOffset(0),
       m_lastTxCh(nullptr)
 {

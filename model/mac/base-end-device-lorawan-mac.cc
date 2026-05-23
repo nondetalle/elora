@@ -107,19 +107,15 @@ BaseEndDeviceLorawanMac::GetTypeId()
 }
 
 BaseEndDeviceLorawanMac::BaseEndDeviceLorawanMac()
-    // Protected MAC layer settings
-    : m_dataRate(0),
+    : // Protected MAC layer settings
       m_txPower(14),
-      m_nbTrans(1),
       // Protected MAC layer context
       m_fCnt(0),
       m_adrAckCnt(0),
       m_adrAckReq(false),
       // Private Header fields
-      m_fType(LorawanMacHeader::UNCONFIRMED_DATA_UP),
       m_address(LoraDeviceAddress(0)),
       // Private MAC layer settings
-      m_enableCrypto(false),
       m_aggregatedDutyCycle(1),
       // Private MAC layer context
       m_lastKnownLinkMargin(0),

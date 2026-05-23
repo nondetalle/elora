@@ -18,6 +18,8 @@
 #include "ns3/end-device-lora-phy.h"
 #include "ns3/simulator.h"
 
+#include <bitset>
+
 namespace ns3
 {
 namespace lorawan
@@ -476,14 +478,12 @@ BaseEndDeviceLorawanMac::ApplyMACCommands(LoraFrameHeader fHdr, Ptr<const Packet
         }
         case (LINK_ADR_REQ): {
             NS_LOG_DEBUG("Detected a LinkAdrReq command.");
-            // Cast the command
             auto linkAdrReq = DynamicCast<LinkAdrReq>(cmd);
-            // Call the appropriate function to take action
             OnLinkAdrReq(linkAdrReq->GetDataRate(),
                          linkAdrReq->GetTxPower(),
-                         linkAdrReq->GetEnabledChannelsList(),
+                         linkAdrReq->GetChMask(),
                          linkAdrReq->GetChMaskCntl(),
-                         linkAdrReq->GetRepetitions());
+                         linkAdrReq->GetNbTrans());
             break;
         }
         case (DUTY_CYCLE_REQ): {
@@ -609,15 +609,16 @@ BaseEndDeviceLorawanMac::OnLinkCheckAns(uint8_t margin, uint8_t gwCnt)
 void
 BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
                                       uint8_t txPower,
-                                      std::list<int> enabledChannels,
+                                      uint16_t chMask,
                                       uint8_t chMaskCntl,
                                       uint8_t nbTrans)
 {
-    NS_LOG_FUNCTION(this << unsigned(dataRate) << unsigned(txPower) << enabledChannels
+    NS_LOG_FUNCTION(this << unsigned(dataRate) << unsigned(txPower) << std::bitset<16>(chMask)
                          << unsigned(chMaskCntl) << unsigned(nbTrans));
 
     // Adapted from: github.com/Lora-net/SWL2001.git v4.3.1
     // For the time being, this implementation is valid for the EU868 region
+    const uint8_t NUM_CHAN = 16;
 
     NS_ASSERT_MSG(!(dataRate & 0xF0), "dataRate field > 4 bits");
     NS_ASSERT_MSG(!(txPower & 0xF0), "txPower field > 4 bits");
@@ -628,15 +629,18 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
     bool dataRateAck = true;
     bool powerAck = true;
 
+    NS_LOG_DEBUG("Channel mask = " << std::bitset<16>(chMask)
+                                   << ", ChMaskCtrl = " << unsigned(chMaskCntl));
+
     // Check channel mask
     switch (chMaskCntl)
     {
     // Channels 0 to 15
     case 0:
-        // Check whether all specified channels exist on this device
-        for (auto& i : enabledChannels)
+        // Check if all enabled channels have a valid frequency
+        for (size_t i = 0; i < NUM_CHAN; ++i)
         {
-            if (!m_channelManager->GetChannel(i))
+            if ((chMask & 0b1 << i) && !m_channelManager->GetChannel(i))
             {
                 NS_LOG_WARN("Invalid channel mask");
                 channelMaskAck = false;
@@ -646,12 +650,12 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
         break;
     // All channels ON independently of the ChMask field value
     case 6:
-        enabledChannels.clear();
-        for (size_t i = 0; i < 256; ++i)
+        chMask = 0b0;
+        for (size_t i = 0; i < NUM_CHAN; ++i)
         {
             if (m_channelManager->GetChannel(i))
             {
-                enabledChannels.emplace_back(i);
+                chMask |= 0b1 << i;
             }
         }
         break;
@@ -662,7 +666,7 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
     }
 
     // check if all channels are disabled
-    if (enabledChannels.empty())
+    if (chMask == 0)
     {
         NS_LOG_WARN("Invalid channel mask");
         channelMaskAck = false;
@@ -676,9 +680,10 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
         {
             bool compatible = false;
             // Look for enabled channel that supports current data rate.
-            for (auto& i : enabledChannels)
+            for (size_t i = 0; i < NUM_CHAN; ++i)
             {
-                if (m_dataRate >= m_channelManager->GetChannel(i)->GetMinimumDataRate() &&
+                if ((chMask & 0b1 << i) &&
+                    m_dataRate >= m_channelManager->GetChannel(i)->GetMinimumDataRate() &&
                     m_dataRate <= m_channelManager->GetChannel(i)->GetMaximumDataRate())
                 { // Found compatible channel, break loop
                     compatible = true;
@@ -692,14 +697,11 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
             }
             else // apply channel mask configuration
             {
-                for (size_t i = 0; i < 256; ++i)
+                for (size_t i = 0; i < NUM_CHAN; ++i)
                 {
                     if (auto c = m_channelManager->GetChannel(i); c)
                     {
-                        (std::find(enabledChannels.begin(), enabledChannels.end(), i) !=
-                         enabledChannels.end())
-                            ? c->EnableForUplink()
-                            : c->DisableForUplink();
+                        (chMask & 0b1 << i) ? c->EnableForUplink() : c->DisableForUplink();
                     }
                 }
                 dataRateAck = powerAck = false; // only ack channel mask
@@ -717,26 +719,29 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
         {
             bool compatible = false;
             // Look for enabled channel that supports config. data rate.
-            for (auto i : enabledChannels) // all enabled by chMask, even if it was invalid
+            for (size_t i = 0; i < NUM_CHAN; ++i)
             {
-                if (const auto& c = m_channelManager->GetChannel(i); c) // exists
+                if (chMask & 0b1 << i) // all enabled by chMask, even if it was invalid
                 {
-                    if (dataRate >= c->GetMinimumDataRate() && dataRate <= c->GetMaximumDataRate())
-                    { // Found compatible channel, break loop
-                        compatible = true;
-                        break;
+                    if (const auto& c = m_channelManager->GetChannel(i); c) // exists
+                    {
+                        if (dataRate >= c->GetMinimumDataRate() &&
+                            dataRate <= c->GetMaximumDataRate())
+                        { // Found compatible channel, break loop
+                            compatible = true;
+                            break;
+                        }
                     }
-                }
-                else // manages invalid case, checks with defaults
-                {
-                    if (GetSfFromDataRate(dataRate) && GetBandwidthFromDataRate(dataRate))
-                    { // Found compatible (invalid) channel, break loop
-                        compatible = true;
-                        break;
+                    else // manages invalid case, checks with defaults
+                    {
+                        if (GetSfFromDataRate(dataRate) && GetBandwidthFromDataRate(dataRate))
+                        { // Found compatible (invalid) channel, break loop
+                            compatible = true;
+                            break;
+                        }
                     }
                 }
             }
-
             // Check if it is acceptable
             if (!compatible)
             {
@@ -758,14 +763,11 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
         // If no error, apply configurations
         if (channelMaskAck && dataRateAck && powerAck)
         {
-            for (size_t i = 0; i < 256; ++i)
+            for (size_t i = 0; i < NUM_CHAN; ++i)
             {
                 if (auto c = m_channelManager->GetChannel(i); c)
                 {
-                    (std::find(enabledChannels.begin(), enabledChannels.end(), i) !=
-                     enabledChannels.end())
-                        ? c->EnableForUplink()
-                        : c->DisableForUplink();
+                    (chMask & 0b1 << i) ? c->EnableForUplink() : c->DisableForUplink();
                 }
             }
             if (txPower != 0xF) // If value is 0xF, ignore config.

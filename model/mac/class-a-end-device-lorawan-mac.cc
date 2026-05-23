@@ -157,8 +157,8 @@ ClassAEndDeviceLorawanMac::Receive(Ptr<const Packet> packet)
     // Open the context to new transmissions
     m_txContext.busy = false;
     // Reset ADR backoff counter and bit
-    m_ADRACKCnt = 0;
-    m_ADRACKReq = false;
+    m_adrAckCnt = 0;
+    m_adrAckReq = false;
     // Clear commands that are re-sent until downlink (DlChannelAns and RxTimingSetupAns)
     m_fOpts.clear();
 
@@ -265,9 +265,9 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
     // Update uplink frame counter
     m_fCnt++;
     // Update ADRACKCnt only if nothing was received
-    if (!recv && m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
+    if (!recv)
     {
-        m_ADRACKCnt++;
+        m_adrAckCnt++;
     }
 }
 

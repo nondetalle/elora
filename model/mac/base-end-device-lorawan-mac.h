@@ -27,7 +27,6 @@
 
 #define ADR_ACK_LIMIT 64
 #define ADR_ACK_DELAY 32
-#define MAX_ADR_ACK_CNT (ADR_ACK_LIMIT + 7 * ADR_ACK_DELAY + 1)
 
 namespace ns3
 {
@@ -254,10 +253,10 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     uint16_t m_fCnt;
 
     /* Counter for keepalive purposes */
-    uint16_t m_ADRACKCnt;
+    uint16_t m_adrAckCnt;
 
     /* Uplink only - request keepalive acknowledgement from the server */
-    bool m_ADRACKReq;
+    bool m_adrAckReq;
 
     /**
      * The event of transmitting a packet in a consecutive moment, when the duty cycle let us

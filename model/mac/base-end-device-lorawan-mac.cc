@@ -113,8 +113,8 @@ BaseEndDeviceLorawanMac::BaseEndDeviceLorawanMac()
       m_nbTrans(1),
       // Protected MAC layer context
       m_fCnt(0),
-      m_ADRACKCnt(0),
-      m_ADRACKReq(false),
+      m_adrAckCnt(0),
+      m_adrAckReq(false),
       // Private Header fields
       m_fType(LorawanMacHeader::UNCONFIRMED_DATA_UP),
       m_address(LoraDeviceAddress(0)),
@@ -219,10 +219,7 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
             }
             // Update frame counter and ADRACKCnt (normally updated after exhausting all reTxs)
             m_fCnt++;
-            if (m_ADRACKCnt < MAX_ADR_ACK_CNT) // overflow prevention
-            {
-                m_ADRACKCnt++;
-            }
+            m_adrAckCnt++;
         }
         // Reset reTx context
         m_txContext = {.firstAttempt = Simulator::Now(),
@@ -244,11 +241,16 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
         NS_LOG_DEBUG("Retransmitting an old packet.");
     }
 
-    if (m_adr)
+    // Evaluate ADR backoff as in LoRaWAN specification, V1.0.4 (2020)
+    // Adapted from: github.com/Lora-net/SWL2001.git v4.8.0
+    m_adrAckReq = (m_adrAckCnt >= ADR_ACK_LIMIT); // Set the ADRACKReq bit in frame header
+    if (m_adrAckCnt >= ADR_ACK_LIMIT + ADR_ACK_DELAY)
     {
-        // ADR backoff as in LoRaWAN specification, V1.0.4 (2020)
+        // Unreachable by retx: they do not increase ADRACKCnt
         ExecuteADRBackoff();
+        m_adrAckCnt = ADR_ACK_LIMIT;
     }
+    NS_ASSERT(m_adrAckCnt < 2400);
 
     // Add the Lora Frame Header to the packet
     LoraFrameHeader fHdr;
@@ -293,30 +295,31 @@ BaseEndDeviceLorawanMac::ExecuteADRBackoff()
 {
     NS_LOG_FUNCTION(this);
 
-    // ADR backoff as in LoRaWAN specification, V1.0.4 (2020)
-    if (m_ADRACKCnt == ADR_ACK_LIMIT)
+    // Adapted from: github.com/Lora-net/SWL2001.git v4.8.0
+    // For the time being, this implementation is valid for the EU868 region
+
+    if (!m_adr)
     {
-        m_ADRACKReq = true; // Set the ADRACKReq bit in frame header
+        return;
     }
-    else if (m_ADRACKCnt == ADR_ACK_LIMIT + ADR_ACK_DELAY)
+
+    if (m_txPower < 14)
     {
         m_txPower = 14; // Reset transmission power to default
+        return;
     }
-    else if (m_ADRACKCnt > ADR_ACK_LIMIT && !((m_ADRACKCnt - ADR_ACK_LIMIT) % ADR_ACK_DELAY))
+
+    if (m_dataRate != 0)
     {
-        if (m_dataRate)
-        {
-            m_dataRate--; // Decrease data rate
-        }
-        else
-        {
-            // Enable default channels and set nbTrans to 1
-            m_channelManager->GetChannel(0)->EnableForUplink();
-            m_channelManager->GetChannel(1)->EnableForUplink();
-            m_channelManager->GetChannel(2)->EnableForUplink();
-            m_nbTrans = 1;
-        }
+        m_dataRate--;
+        return;
     }
+
+    // Set nbTrans to 1 and re-enable default channels
+    m_nbTrans = 1;
+    m_channelManager->GetChannel(0)->EnableForUplink();
+    m_channelManager->GetChannel(1)->EnableForUplink();
+    m_channelManager->GetChannel(2)->EnableForUplink();
 }
 
 Ptr<LogicalChannel>
@@ -385,7 +388,7 @@ BaseEndDeviceLorawanMac::FillHeader(LoraFrameHeader& fHdr)
     fHdr.SetFPort(1); // TODO Use an appropriate frame port based on the application
     fHdr.SetAddress(m_address);
     fHdr.SetAdr(m_adr);
-    fHdr.SetAdrAckReq(m_ADRACKReq);
+    fHdr.SetAdrAckReq(m_adrAckReq);
 
     // FPending does not exist in uplink messages
     fHdr.SetFCnt(m_fCnt);

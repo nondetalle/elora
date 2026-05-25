@@ -2330,6 +2330,63 @@ MacCommandTest::DoRun()
         auto rtsa = DynamicCast<RxTimingSetupAns>(*(answers.begin()));
         NS_TEST_ASSERT_MSG_NE(rtsa, nullptr, "NewChannelAns was expected, cmd type cast failed");
     }
+
+    Reset();
+    // DlChannelReq: valid RX1 reply frequency is correctly set
+    {
+        uint8_t chIndex = 0;
+        uint32_t frequencyHz = 865100000;
+        auto answers = RunMacCommand<DlChannelReq>(chIndex, frequencyHz);
+        NS_TEST_ASSERT_MSG_EQ(answers.size(), 1, "1 answer cmd was expected, found 0 or >1");
+        auto c = m_mac->GetLogicalChannelManager()->GetChannel(chIndex);
+        NS_TEST_ASSERT_MSG_NE(c, nullptr, "Channel at chIndex slot expected not to be nullptr");
+        NS_TEST_ASSERT_MSG_EQ(c->GetReplyFrequency(),
+                              frequencyHz,
+                              "Channel reply frequency expected equal to DlChannelReq frequency");
+        auto dca = DynamicCast<DlChannelAns>(*(answers.begin()));
+        NS_TEST_ASSERT_MSG_NE(dca, nullptr, "DlChannelAns was expected, cmd type cast failed");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetUplinkFrequencyExists(),
+                              true,
+                              "UplinkFrequencyExists != true");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetChannelFrequencyOk(), true, "ChannelFrequencyOk != true");
+    }
+
+    Reset();
+    // DlChannelReq: valid RX1 reply frequency is not set for invalid channel index
+    {
+        uint8_t chIndex = 4;
+        uint32_t frequencyHz = 868100000;
+        auto answers = RunMacCommand<DlChannelReq>(chIndex, frequencyHz);
+        NS_TEST_ASSERT_MSG_EQ(answers.size(), 1, "1 answer cmd was expected, found 0 or >1");
+        auto c = m_mac->GetLogicalChannelManager()->GetChannel(chIndex);
+        NS_TEST_ASSERT_MSG_EQ(c, nullptr, "Channel at chIndex slot expected to be nullptr");
+        auto dca = DynamicCast<DlChannelAns>(*(answers.begin()));
+        NS_TEST_ASSERT_MSG_NE(dca, nullptr, "DlChannelAns was expected, cmd type cast failed");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetUplinkFrequencyExists(),
+                              false,
+                              "UplinkFrequencyExists != false");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetChannelFrequencyOk(), true, "ChannelFrequencyOk != true");
+    }
+
+    Reset();
+    // DlChannelReq: invalid RX1 reply frequency is not set
+    { // WARNING: default values are manually set here
+        uint8_t chIndex = 2;
+        uint32_t frequencyHz = 862000000;
+        auto answers = RunMacCommand<DlChannelReq>(chIndex, frequencyHz);
+        NS_TEST_ASSERT_MSG_EQ(answers.size(), 1, "1 answer cmd was expected, found 0 or >1");
+        auto c = m_mac->GetLogicalChannelManager()->GetChannel(chIndex);
+        NS_TEST_ASSERT_MSG_NE(c, nullptr, "Channel at chIndex slot expected not to be nullptr");
+        NS_TEST_ASSERT_MSG_EQ(c->GetReplyFrequency(),
+                              868500000,
+                              "Channel reply frequency expected to be default");
+        auto dca = DynamicCast<DlChannelAns>(*(answers.begin()));
+        NS_TEST_ASSERT_MSG_NE(dca, nullptr, "DlChannelAns was expected, cmd type cast failed");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetUplinkFrequencyExists(),
+                              true,
+                              "UplinkFrequencyExists != true");
+        NS_TEST_EXPECT_MSG_EQ(dca->GetChannelFrequencyOk(), false, "ChannelFrequencyOk != false");
+    }
 }
 
 /**

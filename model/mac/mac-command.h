@@ -782,6 +782,23 @@ class DlChannelAns : public MacCommand
     uint8_t Deserialize(Buffer::Iterator& start) override;
     void Print(std::ostream& os) const override;
 
+    /**
+     * Get the UplinkFrequencyExists field of the DlChannelAns command.
+     *
+     * @return true The uplink frequency of the channel is valid for the end-device.
+     * @return false The uplink frequency is not defined for this channel. The downlink frequency
+     * can only be set for a channel that already has a valid uplink frequency
+     */
+    bool GetUplinkFrequencyExists() const;
+
+    /**
+     * Get the ChannelFrequencyOk field of the DlChannelAns command.
+     *
+     * @return true The end-device is able to use this frequency.
+     * @return false The end-device cannot use this frequency.
+     */
+    bool GetChannelFrequencyOk() const;
+
   private:
     bool m_uplinkFrequencyExists; //!< The Uplink Frequency Exists field
     bool m_channelFrequencyOk;    //!< The Channel Frequency Ok field

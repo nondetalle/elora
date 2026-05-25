@@ -1116,6 +1116,18 @@ DlChannelAns::DlChannelAns(bool uplinkFrequencyExists, bool channelFrequencyOk)
     m_serializedSize = 2;
 }
 
+bool
+DlChannelAns::GetUplinkFrequencyExists() const
+{
+    return m_uplinkFrequencyExists;
+}
+
+bool
+DlChannelAns::GetChannelFrequencyOk() const
+{
+    return m_channelFrequencyOk;
+}
+
 void
 DlChannelAns::Serialize(Buffer::Iterator& start) const
 {

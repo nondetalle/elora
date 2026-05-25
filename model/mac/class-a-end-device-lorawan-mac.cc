@@ -73,9 +73,7 @@ ClassAEndDeviceLorawanMac::SendToPhy(Ptr<Packet> packet)
     m_txParams.sf = GetSfFromDataRate(m_dataRate);
     m_txParams.bandwidthHz = GetBandwidthFromDataRate(m_dataRate);
     m_txParams.lowDataRateOptimizationEnabled = LoraPhy::GetTSym(m_txParams) > MilliSeconds(16);
-    NS_LOG_DEBUG("DR: " << unsigned(m_dataRate));
-    NS_LOG_DEBUG("SF: " << unsigned(m_txParams.sf));
-    NS_LOG_DEBUG("BW: " << m_txParams.bandwidthHz << " Hz");
+    NS_LOG_DEBUG(m_txParams);
 
     m_lastTxCh = GetChannelForTx();
     double frequency = m_lastTxCh->GetFrequency();
@@ -173,7 +171,7 @@ ClassAEndDeviceLorawanMac::Receive(Ptr<const Packet> packet)
     LoraFrameHeader fHdr;
     fHdr.SetAsDownlink();
     int deserialized = packetCopy->RemoveHeader(fHdr);
-    NS_LOG_DEBUG("Deserialized bytes: " << deserialized << ", Frame Header:\n" << fHdr);
+    NS_LOG_DEBUG("Deserialized bytes: " << deserialized << ", Frame Header: " << fHdr);
     // Parse and apply all MAC commands received
     ApplyMACCommands(fHdr, packetCopy);
 
@@ -281,9 +279,9 @@ ClassAEndDeviceLorawanMac::OnRxParamSetupReq(Ptr<RxParamSetupReq> rxParamSetupRe
 
     uint8_t rx1DrOffset = rxParamSetupReq->GetRx1DrOffset();
     uint8_t rx2DataRate = rxParamSetupReq->GetRx2DataRate();
-    double frequency = rxParamSetupReq->GetFrequency();
+    uint32_t frequency = rxParamSetupReq->GetFrequency();
 
-    NS_LOG_INFO(unsigned(rx1DrOffset) << unsigned(rx2DataRate) << frequency);
+    NS_LOG_INFO(unsigned(rx1DrOffset) << " " << unsigned(rx2DataRate) << " " << frequency);
 
     // Check that the desired offset is valid
     bool offsetOk = (0 <= rx1DrOffset && rx1DrOffset <= 5);
@@ -324,17 +322,37 @@ ClassAEndDeviceLorawanMac::OnRxTimingSetupReq(Time delay)
 // Getters and Setters //
 /////////////////////////
 
+uint8_t
+ClassAEndDeviceLorawanMac::GetFirstReceiveWindowDataRate()
+{
+    return m_replyDataRateMatrix.at(m_dataRate).at(m_rx1DrOffset);
+}
+
 void
 ClassAEndDeviceLorawanMac::SetSecondReceiveWindowDataRate(uint8_t dataRate)
 {
+    NS_LOG_FUNCTION(this << unsigned(dataRate));
     m_rwm->SetSf(RecvWindowManager::SECOND, GetSfFromDataRate(dataRate));
     m_rwm->SetDuration(RecvWindowManager::SECOND, GetReceptionWindowDuration(dataRate));
 }
 
-void
-ClassAEndDeviceLorawanMac::SetSecondReceiveWindowFrequency(double frequency)
+uint8_t
+ClassAEndDeviceLorawanMac::GetSecondReceiveWindowDataRate() const
 {
-    m_rwm->SetFrequency(RecvWindowManager::SECOND, frequency);
+    return 12 - m_rwm->GetSf(RecvWindowManager::SECOND);
+}
+
+void
+ClassAEndDeviceLorawanMac::SetSecondReceiveWindowFrequency(uint32_t frequencyHz)
+{
+    NS_LOG_FUNCTION(this << frequencyHz);
+    m_rwm->SetFrequency(RecvWindowManager::SECOND, frequencyHz);
+}
+
+uint32_t
+ClassAEndDeviceLorawanMac::GetSecondReceiveWindowFrequency() const
+{
+    return m_rwm->GetFrequency(RecvWindowManager::SECOND);
 }
 
 void

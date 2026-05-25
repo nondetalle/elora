@@ -90,13 +90,13 @@ BaseEndDeviceLorawanMac::GetTypeId()
                 "communications between this end device "
                 "and a gateway",
                 MakeTraceSourceAccessor(&BaseEndDeviceLorawanMac::m_lastKnownLinkMargin),
-                "ns3::TracedValueCallback::Double")
+                "ns3::TracedValueCallback::uint8_t")
             .AddTraceSource(
                 "LastKnownGatewayCount",
                 "Last known number of gateways able to "
                 "listen to this end device",
                 MakeTraceSourceAccessor(&BaseEndDeviceLorawanMac::m_lastKnownGatewayCount),
-                "ns3::TracedValueCallback::Int")
+                "ns3::TracedValueCallback::uint8_t")
             .AddTraceSource(
                 "AggregatedDutyCycle",
                 "Aggregate duty cycle, in fraction form, "
@@ -486,7 +486,7 @@ BaseEndDeviceLorawanMac::ApplyMACCommands(LoraFrameHeader fHdr, Ptr<const Packet
             // Cast the command
             auto dutyCycleReq = DynamicCast<DutyCycleReq>(cmd);
             // Call the appropriate function to take action
-            OnDutyCycleReq(dutyCycleReq->GetMaximumAllowedDutyCycle());
+            OnDutyCycleReq(dutyCycleReq->GetMaxDutyCycle());
             break;
         }
         case (RX_PARAM_SETUP_REQ): {
@@ -805,8 +805,8 @@ BaseEndDeviceLorawanMac::OnDevStatusReq()
 {
     NS_LOG_FUNCTION(this);
 
-    uint8_t battery = 10; // XXX Fake battery level
-    uint8_t margin = 10;  // XXX Fake margin
+    uint8_t battery = 0; // XXX Fake battery level
+    uint8_t margin = 31; // XXX Fake margin
 
     // Craft a RxParamSetupAns as response
     NS_LOG_INFO("Adding DevStatusAns reply");
@@ -931,6 +931,18 @@ uint8_t
 BaseEndDeviceLorawanMac::GetNumberOfTransmissions() const
 {
     return m_nbTrans;
+}
+
+uint8_t
+BaseEndDeviceLorawanMac::GetLastKnownLinkMarginDb() const
+{
+    return m_lastKnownLinkMargin;
+}
+
+uint8_t
+BaseEndDeviceLorawanMac::GetLastKnownGatewayCount() const
+{
+    return m_lastKnownGatewayCount;
 }
 
 void

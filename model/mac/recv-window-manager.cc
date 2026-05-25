@@ -108,6 +108,30 @@ RecvWindowManager::SetFrequency(WinId id, double f)
     m_win[id].frequency = f;
 }
 
+Time
+RecvWindowManager::GetRx1Delay()
+{
+    return m_win[FIRST].delay;
+}
+
+uint8_t
+RecvWindowManager::GetSf(WinId id)
+{
+    return m_win[id].sf;
+}
+
+Time
+RecvWindowManager::GetDuration(WinId id)
+{
+    return m_win[id].duration;
+}
+
+double
+RecvWindowManager::GetFrequency(WinId id)
+{
+    return m_win[id].frequency;
+}
+
 void
 RecvWindowManager::SetPhy(Ptr<EndDeviceLoraPhy> phy)
 {
@@ -156,8 +180,7 @@ RecvWindowManager::CloseWin(WinId id)
     switch (m_phy->GetState())
     {
     case EndDeviceLoraPhy::TX:
-        NS_ABORT_MSG("PHY was in TX mode when attempting to "
-                     << "close a receive window.");
+        NS_ABORT_MSG("PHY was in TX mode when attempting to close a receive window.");
     case EndDeviceLoraPhy::SLEEP:
         NS_ABORT_MSG("PHY was in already in SLEEP mode when attempting to "
                      << "close a receive window.");

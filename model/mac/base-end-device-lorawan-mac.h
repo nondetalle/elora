@@ -183,6 +183,26 @@ class BaseEndDeviceLorawanMac : public LorawanMac
      */
     uint8_t GetNumberOfTransmissions() const;
 
+    /**
+     * Get the last known link margin from the demodulation floor.
+     *
+     * This is intended for asynchronous polling by the Application layer of the device. For
+     * synchronous behavior provide a callback using the trace system.
+     *
+     * @return The last known link margin [dB]
+     */
+    uint8_t GetLastKnownLinkMarginDb() const;
+
+    /**
+     * Get the last known number of gateways concurrently receiving transmissions from the device.
+     *
+     * This is intended for asynchronous polling by the Application layer of the device. For
+     * synchronous behavior provide a callback using the trace system.
+     *
+     * @return The last known number of receiver gateways.
+     */
+    uint8_t GetLastKnownGatewayCount() const;
+
   protected:
     void DoInitialize() override;
     void DoDispose() override;
@@ -466,21 +486,21 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     ///////////////////////////////
 
     /**
-     * The last known link margin.
+     * The last known link margin in dB from the demodulation floor.
      *
      * This value is obtained (and updated) when a LinkCheckAns Mac command is
      * received.
      */
-    TracedValue<double> m_lastKnownLinkMargin;
+    TracedValue<uint8_t> m_lastKnownLinkMargin;
 
     /**
      * The last known gateway count (i.e., gateways that are in communication
-     * range with this end device)
+     * range with this end device).
      *
      * This value is obtained (and updated) when a LinkCheckAns Mac command is
      * received.
      */
-    TracedValue<int> m_lastKnownGatewayCount;
+    TracedValue<uint8_t> m_lastKnownGatewayCount;
 
     ///////////////////////
     // Private Utilities //

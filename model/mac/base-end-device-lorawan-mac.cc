@@ -202,16 +202,14 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
         // If re-transmissions of last packet were interrupted, update frame counters
         if (m_txContext.nbTxLeft)
         {
+            NS_LOG_DEBUG("New packet from the APP layer: stopping retransmission process");
             // Trace if previous confirmed packet was not acknowledged
             if (m_txContext.waitingAck)
             {
                 uint8_t txs = m_nbTrans - m_txContext.nbTxLeft;
                 m_requiredTxCallback(txs, false, m_txContext.firstAttempt, m_txContext.packet);
-                NS_LOG_DEBUG(
-                    " Received new packet from the application layer: stopping retransmission "
-                    "procedure. Previous packet not acknowledged. Used "
-                    << unsigned(txs) << " transmissions out of a maximum of " << unsigned(m_nbTrans)
-                    << ".");
+                NS_LOG_DEBUG("Previous packet not acknowledged, used "
+                             << unsigned(txs) << " transmissions out of " << unsigned(m_nbTrans));
             }
             // Update frame counter and ADRACKCnt (normally updated after exhausting all reTxs)
             m_fCnt++;
@@ -223,7 +221,6 @@ BaseEndDeviceLorawanMac::DoSend(Ptr<Packet> packet)
                        .nbTxLeft = m_nbTrans,
                        .waitingAck = (m_fType == LorawanMacHeader::CONFIRMED_DATA_UP),
                        .busy = false};
-        NS_LOG_DEBUG("New APP packet: " << packet << ".");
     }
     else // Retransmission
     {
@@ -378,7 +375,7 @@ BaseEndDeviceLorawanMac::AddMacCommand(Ptr<MacCommand> macCommand)
 void
 BaseEndDeviceLorawanMac::FillHeader(LoraFrameHeader& fHdr)
 {
-    NS_LOG_FUNCTION(this << fHdr);
+    NS_LOG_FUNCTION(this);
 
     fHdr.SetAsUplink();
     fHdr.SetFPort(1); // TODO Use an appropriate frame port based on the application
@@ -409,15 +406,19 @@ BaseEndDeviceLorawanMac::FillHeader(LoraFrameHeader& fHdr)
     // Reset MAC command list
     // (but leave DlChannelAns and RxTimingSetupAns)
     m_fOpts = tmpCmdList;
+
+    NS_LOG_DEBUG(fHdr);
 }
 
 void
 BaseEndDeviceLorawanMac::FillHeader(LorawanMacHeader& mHdr)
 {
-    NS_LOG_FUNCTION(this << mHdr);
+    NS_LOG_FUNCTION(this);
 
     mHdr.SetFType(m_fType);
     mHdr.SetMajor(0);
+
+    NS_LOG_DEBUG(mHdr);
 }
 
 void
@@ -933,6 +934,12 @@ uint8_t
 BaseEndDeviceLorawanMac::GetNumberOfTransmissions() const
 {
     return m_nbTrans;
+}
+
+uint16_t
+BaseEndDeviceLorawanMac::GetFCnt() const
+{
+    return m_fCnt;
 }
 
 uint8_t

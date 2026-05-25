@@ -42,7 +42,7 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     {
         Time firstAttempt;
         Ptr<Packet> packet = nullptr;
-        uint8_t nbTxLeft;
+        uint8_t nbTxLeft = 0;
         bool waitingAck = false;
         bool busy = false;
     };
@@ -182,6 +182,11 @@ class BaseEndDeviceLorawanMac : public LorawanMac
      * Set the maximum number of transmissions allowed.
      */
     uint8_t GetNumberOfTransmissions() const;
+
+    /**
+     * Set the current value of the frame counter.
+     */
+    uint16_t GetFCnt() const;
 
     /**
      * Get the last known link margin from the demodulation floor.

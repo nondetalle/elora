@@ -345,9 +345,10 @@ LoraFrameHeader::Print(std::ostream& os) const
         os << ", ";
         c->Print(os);
     }
+    os << ")";
     if (m_fPort > -1)
     {
-        os << "), FPort=" << m_fPort;
+        os << ", FPort=" << m_fPort;
     }
 }
 

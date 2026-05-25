@@ -67,7 +67,7 @@ ClassAEndDeviceLorawanMac::~ClassAEndDeviceLorawanMac()
 void
 ClassAEndDeviceLorawanMac::SendToPhy(Ptr<Packet> packet)
 {
-    NS_LOG_DEBUG("Packet: " << packet);
+    NS_LOG_FUNCTION(this << packet);
 
     // Configure PHY tx params
     m_txParams.sf = GetSfFromDataRate(m_dataRate);
@@ -80,7 +80,7 @@ ClassAEndDeviceLorawanMac::SendToPhy(Ptr<Packet> packet)
     // Make sure we can transmit at the current power on this channel
     NS_ASSERT_MSG(m_txPower <= m_channelManager->GetTxPowerForChannel(m_lastTxCh),
                   " The selected power is too hight to be supported by this channel.");
-    NS_LOG_DEBUG("Freq: " << frequency << " Hz");
+    NS_LOG_DEBUG("Freq: " << uint32_t(frequency) << " Hz");
 
     // Tag packet with datarate and frequency
     LoraTag tag;
@@ -91,15 +91,13 @@ ClassAEndDeviceLorawanMac::SendToPhy(Ptr<Packet> packet)
 
     // Get the duration
     Time duration = m_phy->GetTimeOnAir(packet, m_txParams);
-    NS_LOG_DEBUG("Duration: " << duration.GetSeconds());
+    NS_LOG_DEBUG("Duration: " << duration.As(Time::MS));
     // Add the event to the channelHelper to keep track of duty cycle
     m_channelManager->AddEvent(duration, m_lastTxCh);
 
     // Send the packet to the PHY layer to send it on the channel
     DynamicCast<EndDeviceLoraPhy>(m_phy)->SwitchToStandby();
     m_phy->Send(packet, m_txParams, frequency, m_txPower);
-    // Fire trace source
-    m_sentNewPacket(packet);
 }
 
 void
@@ -212,10 +210,14 @@ ClassAEndDeviceLorawanMac::NoReception()
 void
 ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
 {
+    NS_LOG_FUNCTION(this << outcome);
+
     bool recv = (outcome == RECV || outcome == ACK); // We received something
     bool needAck = m_txContext.waitingAck;           // We were waiting for acknowledgement
     bool gotAck = (outcome == ACK);                  // We got acknowledgement
     bool canReTx = (m_txContext.nbTxLeft > 0 && m_nextTx.IsExpired()); // We can retransmit
+    NS_LOG_DEBUG("recv=" << recv << ",needAck=" << needAck << ",gotAck=" << gotAck
+                         << ",canReTx=" << canReTx);
 
     // Condition to schedule retransmission:
     // either we did not receive or we weren't acknowledged + we can retransmit
@@ -245,7 +247,7 @@ ClassAEndDeviceLorawanMac::ManageRetransmissions(RxOutcome outcome)
     {
         m_requiredTxCallback(txs, true, m_txContext.firstAttempt, m_txContext.packet);
         NS_LOG_DEBUG("Received ACK packet after "
-                     << unsigned(txs) << " transmissions: stopping retransmission procedure. ");
+                     << unsigned(txs) << " transmissions: stopping retransmission procedure");
     }
     // Acknowledgement failure of confirmed txs
     // (either exhausted all reTxs or new pkt scheduled while busy)

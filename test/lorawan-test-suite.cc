@@ -2486,7 +2486,6 @@ AdrBackoffTest::Reset()
     LorawanMacHelper macHelper;
     macHelper.SetRegion(LorawanMacHelper::EU);
     macHelper.SetType("ns3::ClassAEndDeviceLorawanMac");
-    /// @todo Install should not require a node in input.
     m_mac = DynamicCast<ClassAEndDeviceLorawanMac>(macHelper.Install(nullptr));
     NS_TEST_EXPECT_MSG_NE(m_mac, nullptr, "Failed to initialize MAC layer object.");
     auto phy = CreateObject<EndDeviceLoraPhy>();
@@ -2581,6 +2580,494 @@ AdrBackoffTest::DoRun()
 /**
  * @ingroup lorawan
  *
+ * It tests the correct execution of the retransmissions in LoRaWAN devices.
+ * (See, LoRaWAN L2 1.0.4 Specifications (2020), Section 4.3.1.3)
+ */
+class RetransmissionTest : public TestCase
+{
+  public:
+    RetransmissionTest();           //!< Default constructor
+    ~RetransmissionTest() override; //!< Destructor
+
+  private:
+    /**
+     * Create and send an empty app payload unconfirmed frame through the MAC layer NbTrans times.
+     * The packet is sent after a delay (simulated time is fast-forwarded to the event) such that
+     * the device does not incur any duty-cycle limitation. The sent packet FHDR is returned as
+     * argument for validation purposes.
+     *
+     * @param after Delay to schedule the packet after to avoid duty-cycle limitations
+     * @param fhdr [out] FHDR of the constructed frame passed to PHY by the MAC
+     */
+    void SendUplink(LoraFrameHeader& fhdr);
+
+    /**
+     * Create and schedule an empty payload downlink destined for the LoRaWAN MAC. This is used
+     * to test stopping the retransmission procedure.
+     *
+     * @note This does not call Simulator::Run(), enabling preemptive scheduling
+     *
+     * @param after Delay to schedule the packet after to sync with rx windows
+     * @param ack Whether to set the ACK flag in the frame header
+     */
+    void ScheduleDownlink(Time after, bool ack = false);
+
+    /**
+     * Callback for tracing MAC layer SentNewPacket.
+     *
+     * @param packet The packet sent.
+     */
+    void MacSentNewPacket(Ptr<const Packet> packet);
+
+    /**
+     * Callback for tracing MAC layer RequiredTransmissions.
+     *
+     * @note This callback only traces confirmed packets, unused otherwise.
+     *
+     * @param transmissions Number of transmissions carried out
+     * @param successful Whether the packet was acknowledged
+     * @param firstAttempt Time of first transmission attempt
+     * @param packet The packet sent
+     */
+    void MacRequiredTransmissions(uint8_t transmissions,
+                                  bool successful,
+                                  Time firstAttempt,
+                                  Ptr<Packet> packet);
+
+    /**
+     * Callback for tracing PHY layer StartSending.
+     *
+     * @param packet The packet being sent.
+     * @param node The sender node id if any, 0 otherwise.
+     */
+    void PhyStartSending(Ptr<const Packet> packet, uint32_t node);
+
+    /**
+     * This function resets the simulation and device MAC layer, use before test sub-cases.
+     */
+    void Reset();
+
+    void DoRun() override;
+
+    Ptr<ClassAEndDeviceLorawanMac> m_mac; //!< The end device's MAC layer used in tests.
+    Ptr<Packet> m_packet;                 //!< Target packet for tracing
+
+    int m_macSentNewPacketCalls = 0;    //!< Counter for MacSentNewPacket calls
+    int m_macRequiredTransmissions = 0; //!< Counter for MacRequiredTransmissions calls
+    int m_phyStartSendingCalls = 0;     //!< Counter for PhyStartSending calls
+
+    uint8_t m_numTransmissions = 0;   //<! Number of confirmed packet transmissions
+    bool m_successfullyAcked = false; //<! Acknowledgement of confirmed packet
+};
+
+RetransmissionTest::RetransmissionTest()
+    : TestCase("Test the retransmission procedure of the LoRaWAN MAC protocol")
+{
+}
+
+RetransmissionTest::~RetransmissionTest()
+{
+    m_mac = nullptr;
+}
+
+void
+RetransmissionTest::SendUplink(LoraFrameHeader& fhdr)
+{
+    Ptr<Packet> pkt;
+    LorawanMacHeader mhdr;
+    // Send packet through the MAC layer
+    pkt = Create<Packet>(0);
+    m_packet = pkt;
+    Simulator::ScheduleNow(&ClassAEndDeviceLorawanMac::Send, m_mac, pkt);
+    Simulator::Run();
+    pkt->RemoveAtEnd(4); // MIC
+    // Retrieve uplink FHDR
+    pkt->RemoveHeader(mhdr);
+    fhdr.SetAsUplink();
+    pkt->RemoveHeader(fhdr);
+    NS_LOG_LOGIC("Frame Header: " << fhdr);
+}
+
+void
+RetransmissionTest::ScheduleDownlink(Time after, bool ack)
+{
+    Ptr<Packet> pkt;
+    LoraFrameHeader fhdr;
+    LorawanMacHeader mhdr;
+    // Prepare DL packet
+    pkt = Create<Packet>(0);
+    fhdr.SetAsDownlink();
+    fhdr.SetAck(ack);
+    pkt->AddHeader(fhdr);
+    mhdr.SetFType(LorawanMacHeader::UNCONFIRMED_DATA_DOWN);
+    pkt->AddHeader(mhdr);
+    pkt->AddPaddingAtEnd(4); // MIC
+    // Schedule MAC layer reception
+    Simulator::Schedule(after, &ClassAEndDeviceLorawanMac::Receive, m_mac, pkt);
+}
+
+void
+RetransmissionTest::MacSentNewPacket(Ptr<const Packet> packet)
+{
+    m_macSentNewPacketCalls++;
+}
+
+void
+RetransmissionTest::MacRequiredTransmissions(uint8_t transmissions,
+                                             bool successful,
+                                             Time firstAttempt,
+                                             Ptr<Packet> packet)
+{
+    m_macRequiredTransmissions++;
+    if (m_packet == packet)
+    {
+        m_numTransmissions = transmissions;
+        m_successfullyAcked = successful;
+    }
+}
+
+void
+RetransmissionTest::PhyStartSending(Ptr<const Packet> packet, uint32_t node)
+{
+    m_phyStartSendingCalls++;
+}
+
+void
+RetransmissionTest::Reset()
+{
+    m_macSentNewPacketCalls = 0;
+    m_macRequiredTransmissions = 0;
+    m_phyStartSendingCalls = 0;
+    m_numTransmissions = 0;
+    m_successfullyAcked = false;
+    Simulator::Destroy();
+    // Reset MAC state
+    LorawanMacHelper macHelper;
+    macHelper.SetRegion(LorawanMacHelper::EU);
+    macHelper.SetType("ns3::ClassAEndDeviceLorawanMac");
+    m_mac = DynamicCast<ClassAEndDeviceLorawanMac>(macHelper.Install(nullptr));
+    m_mac->SetDataRate(5);
+    m_mac->TraceConnectWithoutContext("SentNewPacket",
+                                      MakeCallback(&RetransmissionTest::MacSentNewPacket, this));
+    m_mac->TraceConnectWithoutContext(
+        "RequiredTransmissions",
+        MakeCallback(&RetransmissionTest::MacRequiredTransmissions, this));
+    NS_TEST_EXPECT_MSG_NE(m_mac, nullptr, "Failed to initialize MAC layer object.");
+    auto phy = CreateObject<EndDeviceLoraPhy>();
+    phy->SetChannel(CreateObject<LoraChannel>());
+    phy->SetMobility(CreateObject<ConstantPositionMobilityModel>());
+    phy->TraceConnectWithoutContext("StartSending",
+                                    MakeCallback(&RetransmissionTest::PhyStartSending, this));
+    m_mac->SetPhy(phy);
+    m_mac->Initialize();
+}
+
+void
+RetransmissionTest::DoRun()
+{
+    NS_LOG_DEBUG("RetransmissionTest");
+
+    Reset();
+    // Unconfirmed send yields the correct number of retransmissions (base case)
+    { // WARNING: default values are manually set here
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected MAC frame counter value");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              1,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send yields the correct number of retransmissions
+    {
+        uint8_t nbTrans = 4;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send yields the correct number of retransmissions (limit case)
+    {
+        uint8_t nbTrans = 15;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected MAC frame counter value");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              nbTrans,
+                              "Unexpected number of physical layer transmissions");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send interrupted in-between retransmissions
+    {
+        uint8_t nbTrans = 9;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        Simulator::Schedule(Seconds(2.5),
+                            &ClassAEndDeviceLorawanMac::Send,
+                            m_mac,
+                            Create<Packet>(0));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 2, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              1 + nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              2,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send retransmissions interrupted while MAC layer busy
+    {
+        uint8_t nbTrans = 8;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        Simulator::Schedule(Seconds(8), &ClassAEndDeviceLorawanMac::Send, m_mac, Create<Packet>(0));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 2, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              2 + nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              2,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send retransmissions interrupted after downlink
+    {
+        uint8_t nbTrans = 3;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        ScheduleDownlink(Seconds(1.2));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              1,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Unconfirmed send retransmissions interrupted after downlink (different params)
+    {
+        uint8_t nbTrans = 13;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
+        ScheduleDownlink(Seconds(30.3));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              5,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              0,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+    }
+
+    Reset();
+    // Confirmed yields the correct number of unacknowledged retransmissions
+    {
+        uint8_t nbTrans = 7;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              1,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+        NS_TEST_ASSERT_MSG_EQ(m_numTransmissions,
+                              nbTrans,
+                              "Unexpected number of transmissions for confirmed packet");
+        NS_TEST_ASSERT_MSG_EQ(m_successfullyAcked,
+                              false,
+                              "Unexpected acknowledgment state for confirmed packet");
+    }
+
+    Reset();
+    // Confirmed send retransmissions interrupted in-between retransmissions
+    {
+        uint8_t nbTrans = 6;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
+        Simulator::Schedule(Seconds(8.5),
+                            &ClassAEndDeviceLorawanMac::Send,
+                            m_mac,
+                            Create<Packet>(0));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 2, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              2 + nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              2,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              2,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+        NS_TEST_ASSERT_MSG_EQ(m_numTransmissions,
+                              2,
+                              "Unexpected number of transmissions for confirmed packet");
+        NS_TEST_ASSERT_MSG_EQ(m_successfullyAcked,
+                              false,
+                              "Unexpected acknowledgment state for confirmed packet");
+    }
+
+    Reset();
+    // Confirmed send retransmissions interrupted interrupted while MAC layer busy
+    {
+        uint8_t nbTrans = 9;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
+        Simulator::Schedule(Seconds(21),
+                            &ClassAEndDeviceLorawanMac::Send,
+                            m_mac,
+                            Create<Packet>(0));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 2, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              3 + nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              2,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              2,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+        NS_TEST_ASSERT_MSG_EQ(m_numTransmissions,
+                              3,
+                              "Unexpected number of transmissions for confirmed packet");
+        NS_TEST_ASSERT_MSG_EQ(m_successfullyAcked,
+                              false,
+                              "Unexpected acknowledgment state for confirmed packet");
+    }
+
+    Reset();
+    // Confirmed send retransmissions not interrupted after downlink without ACK
+    {
+        uint8_t nbTrans = 10;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
+        ScheduleDownlink(Seconds(45));
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              nbTrans,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              1,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+        NS_TEST_ASSERT_MSG_EQ(m_numTransmissions,
+                              nbTrans,
+                              "Unexpected number of transmissions for confirmed packet");
+        NS_TEST_ASSERT_MSG_EQ(m_successfullyAcked,
+                              false,
+                              "Unexpected acknowledgment state for confirmed packet");
+    }
+
+    Reset();
+    // Confirmed send retransmissions interrupted after downlink with ACK
+    {
+        uint8_t nbTrans = 14;
+        m_mac->SetNumberOfTransmissions(nbTrans);
+        m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
+        ScheduleDownlink(Seconds(67), true);
+        LoraFrameHeader fhdr;
+        SendUplink(fhdr);
+        NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFCnt(), 1, "Unexpected FCnt value in MAC layer");
+        NS_TEST_ASSERT_MSG_EQ(m_phyStartSendingCalls,
+                              10,
+                              "Unexpected number of PHY layer StartSending calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macSentNewPacketCalls,
+                              1,
+                              "Unexpected number of MAC layer SendNewPacket calls");
+        NS_TEST_ASSERT_MSG_EQ(m_macRequiredTransmissions,
+                              1,
+                              "Unexpected number of MAC layer RequiredTransmissions calls");
+        NS_TEST_ASSERT_MSG_EQ(m_numTransmissions,
+                              10,
+                              "Unexpected number of transmissions for confirmed packet");
+        NS_TEST_ASSERT_MSG_EQ(m_successfullyAcked,
+                              true,
+                              "Unexpected acknowledgment state for confirmed packet");
+    }
+}
+
+/**
+ * @ingroup lorawan
+ *
  * The TestSuite class names the TestSuite, identifies what type of TestSuite, and enables the
  * TestCases to be run. Typically, only the constructor for this class must be defined
  */
@@ -2613,6 +3100,7 @@ LorawanTestSuite::LorawanTestSuite()
     AddTestCase(new PhyConnectivityTest, Duration::QUICK);
     AddTestCase(new MacCommandTest, Duration::QUICK);
     AddTestCase(new AdrBackoffTest, Duration::QUICK);
+    AddTestCase(new RetransmissionTest, Duration::QUICK);
 }
 
 // Do not forget to allocate an instance of this TestSuite

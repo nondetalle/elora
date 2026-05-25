@@ -167,7 +167,7 @@ class ClassAEndDeviceLorawanMac : public BaseEndDeviceLorawanMac
     /**
      * Perform the actions that need to be taken when receiving a RxTimingSetupReq command.
      */
-    void OnRxTimingSetupReq(Time delay) override;
+    void OnRxTimingSetupReq(uint8_t del) override;
 
     /**
      * The duration of a receive window in number of symbols. This should be

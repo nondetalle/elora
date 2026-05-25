@@ -654,23 +654,23 @@ class RxTimingSetupReq : public MacCommand
     /**
      * Constructor providing initialization of all parameters.
      *
-     * @param delay The delay encoded in this MAC command.
+     * @param del The delay encoded in this MAC command.
      */
-    RxTimingSetupReq(uint8_t delay);
+    RxTimingSetupReq(uint8_t del);
 
     void Serialize(Buffer::Iterator& start) const override;
     uint8_t Deserialize(Buffer::Iterator& start) override;
     void Print(std::ostream& os) const override;
 
     /**
-     * Get the first window delay as a Time instance.
+     * Get the first window delay field.
      *
-     * @return The delay.
+     * @return The Del field value.
      */
-    Time GetDelay() const;
+    uint8_t GetDel() const;
 
   private:
-    uint8_t m_delay; //!< The Del field
+    uint8_t m_del; //!< The Del field
 };
 
 /**

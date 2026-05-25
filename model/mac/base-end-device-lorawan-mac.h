@@ -442,7 +442,7 @@ class BaseEndDeviceLorawanMac : public LorawanMac
     /**
      * Perform the actions that need to be taken when receiving a RxTimingSetupReq command.
      */
-    virtual void OnRxTimingSetupReq(Time delay) = 0;
+    virtual void OnRxTimingSetupReq(uint8_t del) = 0;
 
     /**
      * Perform the actions that need to be taken when receiving a DlChannelReq command.

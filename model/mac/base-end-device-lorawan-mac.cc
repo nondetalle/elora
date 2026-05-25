@@ -521,7 +521,7 @@ BaseEndDeviceLorawanMac::ApplyMACCommands(LoraFrameHeader fHdr, Ptr<const Packet
             // Cast the command
             auto rxTimingSetupReq = DynamicCast<RxTimingSetupReq>(cmd);
             // Call the appropriate function to take action
-            OnRxTimingSetupReq(rxTimingSetupReq->GetDelay());
+            OnRxTimingSetupReq(rxTimingSetupReq->GetDel());
             break;
         }
         case (TX_PARAM_SETUP_REQ): {

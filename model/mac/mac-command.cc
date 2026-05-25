@@ -883,11 +883,11 @@ RxTimingSetupReq::RxTimingSetupReq()
     m_serializedSize = 2;
 }
 
-RxTimingSetupReq::RxTimingSetupReq(uint8_t delay)
-    : m_delay(delay)
+RxTimingSetupReq::RxTimingSetupReq(uint8_t del)
+    : m_del(del)
 {
     NS_LOG_FUNCTION(this);
-    NS_ASSERT_MSG(!(delay & 0xF0), "delay field > 4 bits");
+    NS_ASSERT_MSG(!(del & 0xF0), "delay field > 4 bits");
     m_commandType = RX_TIMING_SETUP_REQ;
     m_serializedSize = 2;
 }
@@ -897,15 +897,15 @@ RxTimingSetupReq::Serialize(Buffer::Iterator& start) const
 {
     NS_LOG_FUNCTION(this);
     start.WriteU8(GetCIDFromMacCommand(m_commandType)); // Write the CID
-    start.WriteU8(m_delay & 0xF);                       // Write the data
+    start.WriteU8(m_del & 0xF);                         // Write the data
 }
 
 uint8_t
 RxTimingSetupReq::Deserialize(Buffer::Iterator& start)
 {
     NS_LOG_FUNCTION(this);
-    start.ReadU8();                 // Consume the CID
-    m_delay = start.ReadU8() & 0xF; // Read the data
+    start.ReadU8();               // Consume the CID
+    m_del = start.ReadU8() & 0xF; // Read the data
     return m_serializedSize;
 }
 
@@ -914,15 +914,15 @@ RxTimingSetupReq::Print(std::ostream& os) const
 {
     NS_LOG_FUNCTION(this);
     os << "RxTimingSetupReq(";
-    os << "Delay=" << Seconds(m_delay).As(Time::S);
+    os << "Del=" << unsigned(m_del);
     os << ")";
 }
 
-Time
-RxTimingSetupReq::GetDelay() const
+uint8_t
+RxTimingSetupReq::GetDel() const
 {
     NS_LOG_FUNCTION(this);
-    return Seconds((m_delay) ? m_delay : 1);
+    return m_del;
 }
 
 //////////////////////

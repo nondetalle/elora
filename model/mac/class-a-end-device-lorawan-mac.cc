@@ -308,11 +308,11 @@ ClassAEndDeviceLorawanMac::OnRxParamSetupReq(Ptr<RxParamSetupReq> rxParamSetupRe
 }
 
 void
-ClassAEndDeviceLorawanMac::OnRxTimingSetupReq(Time delay)
+ClassAEndDeviceLorawanMac::OnRxTimingSetupReq(uint8_t del)
 {
-    NS_LOG_FUNCTION(this << delay);
+    NS_LOG_FUNCTION(this << unsigned(del));
 
-    m_rwm->SetRx1Delay(delay);
+    m_rwm->SetRx1Delay(Seconds((del) ? del : 1));
 
     NS_LOG_INFO("Adding RxTimingSetupAns reply");
     m_fOpts.emplace_back(Create<RxTimingSetupAns>());

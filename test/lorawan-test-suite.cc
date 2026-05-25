@@ -2303,6 +2303,33 @@ MacCommandTest::DoRun()
         NS_TEST_EXPECT_MSG_EQ(nca->GetDataRateRangeOk(), false, "DataRateRangeOk != false");
         NS_TEST_EXPECT_MSG_EQ(nca->GetChannelFrequencyOk(), false, "ChannelFrequencyOk != false");
     }
+
+    Reset();
+    // RxTimingSetupReq: change first Rx window delay
+    {
+        uint8_t del = 11;
+        auto answers = RunMacCommand<RxTimingSetupReq>(del);
+        NS_TEST_ASSERT_MSG_EQ(answers.size(), 1, "1 answer cmd was expected, found 0 or >1");
+        NS_TEST_ASSERT_MSG_EQ(
+            m_mac->GetFirstReceiveWindowDelay(),
+            Seconds(del),
+            "First Rx window delay expected to be equal to RxTimingSetupReq delay");
+        auto rtsa = DynamicCast<RxTimingSetupAns>(*(answers.begin()));
+        NS_TEST_ASSERT_MSG_NE(rtsa, nullptr, "NewChannelAns was expected, cmd type cast failed");
+    }
+
+    Reset();
+    // RxTimingSetupReq: 0 delay is set to 1
+    {
+        uint8_t del = 0;
+        auto answers = RunMacCommand<RxTimingSetupReq>(del);
+        NS_TEST_ASSERT_MSG_EQ(answers.size(), 1, "1 answer cmd was expected, found 0 or >1");
+        NS_TEST_ASSERT_MSG_EQ(m_mac->GetFirstReceiveWindowDelay(),
+                              Seconds(1),
+                              "First Rx window delay expected to be equal to 1s");
+        auto rtsa = DynamicCast<RxTimingSetupAns>(*(answers.begin()));
+        NS_TEST_ASSERT_MSG_NE(rtsa, nullptr, "NewChannelAns was expected, cmd type cast failed");
+    }
 }
 
 /**

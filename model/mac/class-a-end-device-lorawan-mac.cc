@@ -322,6 +322,12 @@ ClassAEndDeviceLorawanMac::OnRxTimingSetupReq(uint8_t del)
 // Getters and Setters //
 /////////////////////////
 
+Time
+ClassAEndDeviceLorawanMac::GetFirstReceiveWindowDelay()
+{
+    return m_rwm->GetRx1Delay();
+}
+
 uint8_t
 ClassAEndDeviceLorawanMac::GetFirstReceiveWindowDataRate()
 {

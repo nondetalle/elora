@@ -85,6 +85,13 @@ class ClassAEndDeviceLorawanMac : public BaseEndDeviceLorawanMac
     /////////////////////////
 
     /**
+     * Get the first receive window opening delay, starting from transmission end.
+     *
+     * @return The first receive window opening delay.
+     */
+    Time GetFirstReceiveWindowDelay();
+
+    /**
      * Get the data rate that will be used in the first receive window.
      *
      * @return The data rate.

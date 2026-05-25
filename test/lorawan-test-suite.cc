@@ -2418,9 +2418,13 @@ class AdrBackoffTest : public TestCase
      * Create and schedule an empty payload downlink destined for the LoRaWAN MAC. This is used
      * to test resetting the ADR backoff procedure.
      *
+     * Timing should be chosen to completely overwrite the RX window process, for example just after
+     * the transmission ends. It is not realistic but we do not care: RX windows should have their
+     * own test suite.
+     *
      * @note This does not call Simulator::Run(), enabling preemptive scheduling
      *
-     * @param after Delay to schedule the packet after to sync with rx windows
+     * @param after Delay to schedule the packet after
      */
     void ScheduleDownlink(Time after);
 
@@ -2549,7 +2553,7 @@ AdrBackoffTest::DoRun()
     }
 
     Reset();
-    // ADRACKReq back to false after downlink
+    // ADRACKReq back to false after downlink in RX1
     {
         LoraFrameHeader fhdr;
         // Trigger ADRACKReq
@@ -2558,7 +2562,7 @@ AdrBackoffTest::DoRun()
             if (fCnt == ADR_ACK_LIMIT)
             {
                 // After ADR_ACK_LIMIT uplinks, schedule a downlink in the rx window
-                ScheduleDownlink(Minutes(20) + Seconds(1.2));
+                ScheduleDownlink(Minutes(20) + Seconds(2));
             }
             SendUplink(Minutes(20), fhdr);
             NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), fCnt, "Unexpected FCnt value in uplink FHDR");
@@ -2605,9 +2609,13 @@ class RetransmissionTest : public TestCase
      * Create and schedule an empty payload downlink destined for the LoRaWAN MAC. This is used
      * to test stopping the retransmission procedure.
      *
+     * Timing should be chosen to completely overwrite the RX window process, for example just after
+     * the transmission ends. It is not realistic but we do not care: RX windows should have their
+     * own test suite.
+     *
      * @note This does not call Simulator::Run(), enabling preemptive scheduling
      *
-     * @param after Delay to schedule the packet after to sync with rx windows
+     * @param after Delay to schedule the packet after
      * @param ack Whether to set the ACK flag in the frame header
      */
     void ScheduleDownlink(Time after, bool ack = false);
@@ -2881,7 +2889,7 @@ RetransmissionTest::DoRun()
         uint8_t nbTrans = 3;
         m_mac->SetNumberOfTransmissions(nbTrans);
         m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
-        ScheduleDownlink(Seconds(1.2));
+        ScheduleDownlink(Seconds(1));
         LoraFrameHeader fhdr;
         SendUplink(fhdr);
         NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
@@ -2903,7 +2911,7 @@ RetransmissionTest::DoRun()
         uint8_t nbTrans = 13;
         m_mac->SetNumberOfTransmissions(nbTrans);
         m_mac->SetFType(LorawanMacHeader::UNCONFIRMED_DATA_UP);
-        ScheduleDownlink(Seconds(30.3));
+        ScheduleDownlink(Seconds(30));
         LoraFrameHeader fhdr;
         SendUplink(fhdr);
         NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
@@ -3014,7 +3022,7 @@ RetransmissionTest::DoRun()
         uint8_t nbTrans = 10;
         m_mac->SetNumberOfTransmissions(nbTrans);
         m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
-        ScheduleDownlink(Seconds(45));
+        ScheduleDownlink(Seconds(44));
         LoraFrameHeader fhdr;
         SendUplink(fhdr);
         NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
@@ -3042,7 +3050,7 @@ RetransmissionTest::DoRun()
         uint8_t nbTrans = 14;
         m_mac->SetNumberOfTransmissions(nbTrans);
         m_mac->SetFType(LorawanMacHeader::CONFIRMED_DATA_UP);
-        ScheduleDownlink(Seconds(67), true);
+        ScheduleDownlink(Seconds(66), true);
         LoraFrameHeader fhdr;
         SendUplink(fhdr);
         NS_TEST_EXPECT_MSG_EQ(fhdr.GetFCnt(), 0, "Unexpected FCnt value in uplink FHDR");
@@ -3084,6 +3092,7 @@ LorawanTestSuite::LorawanTestSuite()
     // LogComponentEnable("LorawanMac", LOG_LEVEL_DEBUG);
     // LogComponentEnable("BaseEndDeviceLorawanMac", LOG_LEVEL_DEBUG);
     // LogComponentEnable("ClassAEndDeviceLorawanMac", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("RecvWindowManager", LOG_LEVEL_DEBUG);
     // LogComponentEnable("EndDeviceLoraPhy", LOG_LEVEL_DEBUG);
     // LogComponentEnable("LoraPhy", LOG_LEVEL_DEBUG);
     // LogComponentEnable("LoraChannel", LOG_LEVEL_DEBUG);

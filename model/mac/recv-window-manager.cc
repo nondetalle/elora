@@ -158,15 +158,26 @@ void
 RecvWindowManager::OpenWin(WinId id)
 {
     NS_LOG_FUNCTION(this << id);
-    // Set reception window parameters
-    m_phy->SetRxSpreadingFactor(m_win[id].sf);
-    m_phy->SetRxFrequency(m_win[id].frequency);
-    NS_LOG_DEBUG("Opening reception window with parameters: freq="
-                 << m_win[id].frequency << "Hz, SF=" << unsigned(m_win[id].sf) << ".");
-    // Set Phy in Standby mode
-    m_phy->SwitchToStandby();
-    // Schedule closure
-    m_closing = Simulator::Schedule(m_win[id].duration, &RecvWindowManager::CloseWin, this, id);
+    switch (m_phy->GetState())
+    {
+    case EndDeviceLoraPhy::TX:
+        NS_ABORT_MSG("PHY was in TX mode when attempting to open a receive window.");
+    case EndDeviceLoraPhy::RX:
+        // PHY is receiving: let it finish
+        NS_LOG_DEBUG("PHY is receiving: Receive will handle the result.");
+        return;
+    case EndDeviceLoraPhy::SLEEP:
+    case EndDeviceLoraPhy::STANDBY:
+        // Set reception window parameters
+        m_phy->SetRxSpreadingFactor(m_win[id].sf);
+        m_phy->SetRxFrequency(m_win[id].frequency);
+        NS_LOG_DEBUG("Opening reception window with parameters: freq="
+                     << m_win[id].frequency << "Hz, SF=" << unsigned(m_win[id].sf) << ".");
+        // Set Phy in Standby mode
+        m_phy->SwitchToStandby();
+        // Schedule closure
+        m_closing = Simulator::Schedule(m_win[id].duration, &RecvWindowManager::CloseWin, this, id);
+    }
 }
 
 void

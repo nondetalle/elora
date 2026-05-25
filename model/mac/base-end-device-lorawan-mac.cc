@@ -785,9 +785,11 @@ BaseEndDeviceLorawanMac::OnLinkAdrReq(uint8_t dataRate,
 }
 
 void
-BaseEndDeviceLorawanMac::OnDutyCycleReq(double dutyCycle)
+BaseEndDeviceLorawanMac::OnDutyCycleReq(uint8_t maxDutyCycle)
 {
-    NS_LOG_FUNCTION(this << dutyCycle);
+    NS_LOG_FUNCTION(this << unsigned(maxDutyCycle));
+
+    auto dutyCycle = (maxDutyCycle) ? 1 / std::pow(2, double(maxDutyCycle)) : 1;
 
     // Make sure we get a value that makes sense
     NS_ASSERT(0 <= dutyCycle && dutyCycle <= 1);

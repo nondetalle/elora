@@ -352,9 +352,9 @@ class DutyCycleReq : public MacCommand
     /**
      * Get the maximum duty cycle prescribed by this Mac command.
      *
-     * @return The maximum aggregated duty cycle between 0 and 1.
+     * @return The maximum aggregated duty cycle field value.
      */
-    double GetMaxDutyCycle() const;
+    uint8_t GetMaxDutyCycle() const;
 
   private:
     uint8_t m_maxDutyCycle; //!< The MaxDutyCycle field

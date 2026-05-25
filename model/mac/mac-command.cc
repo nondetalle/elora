@@ -186,7 +186,6 @@ uint8_t
 LinkCheckAns::GetGwCnt() const
 {
     NS_LOG_FUNCTION(this);
-
     return m_gwCnt;
 }
 
@@ -414,11 +413,11 @@ DutyCycleReq::Print(std::ostream& os) const
     os << ")";
 }
 
-double
+uint8_t
 DutyCycleReq::GetMaxDutyCycle() const
 {
     NS_LOG_FUNCTION(this);
-    return (m_maxDutyCycle) ? 1 / std::pow(2, double(m_maxDutyCycle)) : 1;
+    return m_maxDutyCycle;
 }
 
 //////////////////
